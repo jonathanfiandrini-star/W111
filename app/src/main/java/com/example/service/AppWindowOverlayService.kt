@@ -74,6 +74,7 @@ class AppWindowOverlayService : Service() {
     private var titleIconView: ImageView? = null
     private var titleLabelView: TextView? = null
     private var modeChipView: TextView? = null
+    private var toggleTaskbarPillView: TextView? = null
     private var snapButtons: Map<WindowSizeMode, TextView> = emptyMap()
 
     // Bottom persistent Windows 11 Taskbar
@@ -92,6 +93,7 @@ class AppWindowOverlayService : Service() {
     private var useFreeformBounds: Boolean = true
     private var keepTaskbarOverApps: Boolean = true
     private var anchorTaskbarAtBottomEdge: Boolean = false
+    private var taskbarHiddenTemporarily: Boolean = false
     private var snapMenuExpanded: Boolean = false
     private var lastFreeformToastAtMs: Long = 0L
     private var clockTickerJob: Job? = null
@@ -141,7 +143,7 @@ class AppWindowOverlayService : Service() {
         ) ?: false
 
         ensureCaptionOverlayAttached()
-        if (keepTaskbarOverApps) {
+        if (keepTaskbarOverApps && !taskbarHiddenTemporarily) {
             ensureTaskbarOverlayAttached()
             updateTaskbarLayoutParamsIfNeeded()
         } else {
@@ -166,7 +168,7 @@ class AppWindowOverlayService : Service() {
                 keepTaskbarOverApps = snapshot.keepTaskbarOverApps
                 anchorTaskbarAtBottomEdge = snapshot.anchorTaskbarAtBottomEdge
                 useFreeformBounds = snapshot.useFreeformBounds
-                if (keepTaskbarOverApps && currentPackageName.isNotBlank()) {
+                if (keepTaskbarOverApps && !taskbarHiddenTemporarily && currentPackageName.isNotBlank()) {
                     ensureTaskbarOverlayAttached()
                     updateTaskbarLayoutParamsIfNeeded()
                     renderTaskbarSnapshot(snapshot)
@@ -327,6 +329,24 @@ class AppWindowOverlayService : Service() {
             setOnClickListener { openFreeformGuide() }
         }
 
+        val toggleTaskbarPill = TextView(this).apply {
+            text = "Barra ⌄"
+            contentDescription = "Mostrar ou ocultar Barra de Tarefas inferior"
+            setTextColor(COLOR_TEXT_SECONDARY)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            minHeight = dp(28)
+            background = GradientDrawable().apply {
+                setColor(COLOR_CARD_SURFACE)
+                cornerRadius = dp(7).toFloat()
+            }
+            visibility = if (keepTaskbarOverApps) View.VISIBLE else View.GONE
+            setOnClickListener { toggleBottomTaskbarVisibility() }
+        }
+        toggleTaskbarPillView = toggleTaskbarPill
+
         val minimizeBtn = createCaptionButton(
             symbol = "—",
             contentDesc = "Minimizar aplicativo",
@@ -361,6 +381,8 @@ class AppWindowOverlayService : Service() {
         }
 
         bar.addView(leftCluster)
+        bar.addView(toggleTaskbarPill)
+        bar.addView(spacer(dp(6)))
         bar.addView(freeformGuidePill)
         bar.addView(spacer(dp(8)))
         bar.addView(minimizeBtn)
@@ -798,7 +820,7 @@ class AppWindowOverlayService : Service() {
                     forceLandscape = forceLandscape,
                     useFreeformBounds = useFreeformBounds,
                     windowSizeMode = entry.sizeMode,
-                    reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(58) else 0,
+                    reserveBottomTaskbarPx = if (keepTaskbarOverApps && !taskbarHiddenTemporarily) dp(60) else 0,
                     reserveTopBarPx = dp(40),
                     anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
                     isExplicitResize = false
@@ -967,6 +989,21 @@ class AppWindowOverlayService : Service() {
         }
     }
 
+    private fun toggleBottomTaskbarVisibility() {
+        taskbarHiddenTemporarily = !taskbarHiddenTemporarily
+        if (keepTaskbarOverApps && !taskbarHiddenTemporarily) {
+            ensureTaskbarOverlayAttached()
+            updateTaskbarLayoutParamsIfNeeded()
+            renderTaskbarSnapshot(ExternalWindowOverlayBus.taskbarSnapshot.value)
+        } else {
+            removeTaskbarOverlayView()
+        }
+        toggleTaskbarPillView?.apply {
+            text = if (taskbarHiddenTemporarily) "Barra ⌃" else "Barra ⌄"
+            setTextColor(if (taskbarHiddenTemporarily) COLOR_ACCENT_CYAN else COLOR_TEXT_SECONDARY)
+        }
+    }
+
     private fun cycleWindowSize() {
         applyWindowSize(currentSizeMode.nextMode())
     }
@@ -984,7 +1021,7 @@ class AppWindowOverlayService : Service() {
             forceLandscape = forceLandscape,
             useFreeformBounds = true,
             windowSizeMode = nextMode,
-            reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(58) else 0,
+            reserveBottomTaskbarPx = if (keepTaskbarOverApps && !taskbarHiddenTemporarily) dp(60) else 0,
             reserveTopBarPx = dp(40),
             anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
             isExplicitResize = true

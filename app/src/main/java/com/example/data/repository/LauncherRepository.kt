@@ -237,7 +237,8 @@ class LauncherRepository(
         reserveBottomTaskbarPx: Int = 0,
         reserveTopBarPx: Int = 0,
         anchorTaskbarAtBottomEdge: Boolean = false,
-        isExplicitResize: Boolean = false
+        isExplicitResize: Boolean = false,
+        forceNewBoundedTask: Boolean = false
     ): Boolean = systemBridge.launchApp(
         packageName = packageName,
         forceLandscape = forceLandscape,
@@ -246,7 +247,8 @@ class LauncherRepository(
         reserveBottomTaskbarPx = reserveBottomTaskbarPx,
         reserveTopBarPx = reserveTopBarPx,
         anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
-        isExplicitResize = isExplicitResize
+        isExplicitResize = isExplicitResize,
+        forceNewBoundedTask = forceNewBoundedTask
     )
 
     fun canWriteSystemSettings(): Boolean = systemBridge.canWriteSystemSettings()

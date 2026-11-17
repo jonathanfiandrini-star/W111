@@ -640,7 +640,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
         val density = getApplication<Application>().resources.displayMetrics.density
         val reserveTaskbarPx = if (prefs.keepTaskbarOverApps && hasOverlayPermission) {
-            (58f * density).roundToInt()
+            (60f * density).roundToInt()
         } else {
             0
         }
@@ -673,6 +673,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             )
         }
 
+        val forceNewBoundedTask = existingWin == null &&
+            prefs.useFreeformLaunchBounds &&
+            repository.isSystemFreeformReady()
         lastExternalLaunchAtMs = System.currentTimeMillis()
         val launched = repository.launchApp(
             packageName = packageName,
@@ -682,7 +685,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             reserveBottomTaskbarPx = reserveTaskbarPx,
             reserveTopBarPx = reserveTopBarPx,
             anchorTaskbarAtBottomEdge = prefs.anchorTaskbarAtBottomEdge,
-            isExplicitResize = isExplicitResize
+            isExplicitResize = isExplicitResize,
+            forceNewBoundedTask = forceNewBoundedTask
         )
         if (launched) {
             val winId = "app_$packageName"

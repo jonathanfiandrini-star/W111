@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.app.PendingIntent
+import android.app.Service
 import android.app.role.RoleManager
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -252,7 +253,8 @@ class SystemBridge(private val context: Context) {
         reserveBottomTaskbarPx: Int = 0,
         reserveTopBarPx: Int = 0,
         anchorTaskbarAtBottomEdge: Boolean = false,
-        isExplicitResize: Boolean = false
+        isExplicitResize: Boolean = false,
+        forceNewBoundedTask: Boolean = false
     ): Boolean {
         return try {
             val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
@@ -261,7 +263,7 @@ class SystemBridge(private val context: Context) {
             if (windowSizeMode == WindowSizeMode.SPLIT_LEFT || windowSizeMode == WindowSizeMode.SPLIT_RIGHT) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
             }
-            if (isExplicitResize) {
+            if (isExplicitResize || forceNewBoundedTask) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
             }
 
@@ -292,14 +294,18 @@ class SystemBridge(private val context: Context) {
             }
 
             if (shouldApplyBounds) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    runCatching { options.setLaunchDisplayId(Display.DEFAULT_DISPLAY) }
+                }
                 val (screenW, screenH, topInsetPx, navBottomPx) = readScreenFrameMetrics()
                 val density = context.resources.displayMetrics.density
                 val topBound = maxOf(reserveTopBarPx, topInsetPx)
                 val navAllowance = if (anchorTaskbarAtBottomEdge) 0 else navBottomPx
-                val bottomReserved = reserveBottomTaskbarPx + navAllowance
+                val bottomClearance = (4f * density).toInt().coerceAtLeast(2)
+                val bottomReserved = reserveBottomTaskbarPx + navAllowance + bottomClearance
                 val usableBottom = (screenH - bottomReserved).coerceAtLeast(topBound + 280)
                 val usableHeight = (usableBottom - topBound).coerceAtLeast(280)
-                val edgeInset = (2f * density).toInt().coerceAtLeast(2)
+                val edgeInset = (6f * density).toInt().coerceAtLeast(4)
                 val maxW = (screenW - edgeInset * 2).coerceAtLeast(480)
 
                 val rect = when (windowSizeMode) {
@@ -355,7 +361,13 @@ class SystemBridge(private val context: Context) {
     )
 
     private fun readScreenFrameMetrics(): ScreenFrameMetrics {
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        val wm = resolveWindowManager()
+        val fallbackTop = getSystemDimenPx("status_bar_height")
+        val isGestureNav = runCatching {
+            Settings.Secure.getInt(context.contentResolver, "navigation_mode", 0) == 2
+        }.getOrDefault(false)
+        val fallbackNav = if (isGestureNav) 0 else getSystemDimenPx("navigation_bar_height")
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && wm != null) {
             val metrics = wm.currentWindowMetrics
             val bounds = metrics.bounds
@@ -367,8 +379,8 @@ class SystemBridge(private val context: Context) {
             return ScreenFrameMetrics(
                 widthPx = maxOf(rawW, rawH),
                 heightPx = minOf(rawW, rawH),
-                topInsetPx = insets.top,
-                navBottomPx = insets.bottom
+                topInsetPx = if (insets.top > 0) insets.top else fallbackTop,
+                navBottomPx = if (insets.bottom > 0) insets.bottom else fallbackNav
             )
         }
         val dm = context.resources.displayMetrics
@@ -377,10 +389,34 @@ class SystemBridge(private val context: Context) {
         return ScreenFrameMetrics(
             widthPx = longSide,
             heightPx = shortSide,
-            topInsetPx = 0,
-            navBottomPx = 0
+            topInsetPx = fallbackTop,
+            navBottomPx = fallbackNav
         )
     }
+
+    private fun resolveWindowManager(): WindowManager? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            context !is Activity &&
+            context !is Service
+        ) {
+            val display = (context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)
+            if (display != null) {
+                val windowCtx = runCatching {
+                    context.createDisplayContext(display)
+                        .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+                }.getOrNull()
+                val ctxWm = windowCtx?.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                if (ctxWm != null) return ctxWm
+            }
+        }
+        return context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+    }
+
+    private fun getSystemDimenPx(name: String): Int = runCatching {
+        val resId = context.resources.getIdentifier(name, "dimen", "android")
+        if (resId > 0) context.resources.getDimensionPixelSize(resId) else 0
+    }.getOrDefault(0)
 
     fun openAppInfo(packageName: String) {
         runCatching {
