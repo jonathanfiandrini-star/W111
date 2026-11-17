@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.BatteryChargingFull
@@ -97,6 +98,8 @@ fun Taskbar(
     telemetry: SystemTelemetry,
     weatherState: WeatherState,
     currentTimeMillis: Long,
+    anchorAtBottomEdge: Boolean = false,
+    onBackClick: () -> Unit,
     onToggleStart: () -> Unit,
     onToggleSearch: () -> Unit,
     onToggleCopilot: () -> Unit,
@@ -124,11 +127,15 @@ fun Taskbar(
         }
     }
 
+    val taskbarBaseModifier = modifier
+        .fillMaxWidth()
+        .background(Win11TaskbarSurface)
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Win11TaskbarSurface)
-            .windowInsetsPadding(WindowInsets.navigationBars)
+        modifier = if (anchorAtBottomEdge) {
+            taskbarBaseModifier
+        } else {
+            taskbarBaseModifier.windowInsetsPadding(WindowInsets.navigationBars)
+        }
     ) {
         // Hairline Fluent top divider
         Box(
@@ -164,6 +171,19 @@ fun Taskbar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    TaskbarIconButton(
+                        isActive = false,
+                        onClick = onBackClick,
+                        testTag = "taskbar_back_button"
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Voltar",
+                            tint = Win11TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     TaskbarIconButton(
                         isActive = activeOverlay is ActiveOverlay.StartMenu,
                         onClick = onToggleStart,

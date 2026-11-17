@@ -76,6 +76,7 @@ class AppWindowOverlayService : Service() {
 
     // Bottom persistent Windows 11 Taskbar
     private var taskbarRootView: View? = null
+    private var taskbarLayoutParams: WindowManager.LayoutParams? = null
     private var taskbarCenterRow: LinearLayout? = null
     private var taskbarWidgetsText: TextView? = null
     private var taskbarTrayStatusText: TextView? = null
@@ -87,6 +88,7 @@ class AppWindowOverlayService : Service() {
     private var currentSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED
     private var forceLandscape: Boolean = true
     private var keepTaskbarOverApps: Boolean = true
+    private var anchorTaskbarAtBottomEdge: Boolean = false
     private var snapMenuExpanded: Boolean = false
     private var clockTickerJob: Job? = null
 
@@ -125,10 +127,15 @@ class AppWindowOverlayService : Service() {
             EXTRA_KEEP_TASKBAR,
             ExternalWindowOverlayBus.taskbarSnapshot.value.keepTaskbarOverApps
         ) ?: true
+        anchorTaskbarAtBottomEdge = intent?.getBooleanExtra(
+            EXTRA_ANCHOR_BOTTOM_EDGE,
+            ExternalWindowOverlayBus.taskbarSnapshot.value.anchorTaskbarAtBottomEdge
+        ) ?: false
 
         ensureCaptionOverlayAttached()
         if (keepTaskbarOverApps) {
             ensureTaskbarOverlayAttached()
+            updateTaskbarLayoutParamsIfNeeded()
         } else {
             removeTaskbarOverlayView()
         }
@@ -149,8 +156,10 @@ class AppWindowOverlayService : Service() {
         serviceScope.launch {
             ExternalWindowOverlayBus.taskbarSnapshot.collect { snapshot ->
                 keepTaskbarOverApps = snapshot.keepTaskbarOverApps
+                anchorTaskbarAtBottomEdge = snapshot.anchorTaskbarAtBottomEdge
                 if (keepTaskbarOverApps && currentPackageName.isNotBlank()) {
                     ensureTaskbarOverlayAttached()
+                    updateTaskbarLayoutParamsIfNeeded()
                     renderTaskbarSnapshot(snapshot)
                 } else {
                     removeTaskbarOverlayView()
@@ -552,13 +561,34 @@ class AppWindowOverlayService : Service() {
 
         wrapper.addView(row)
 
-        val params = WindowManager.LayoutParams(
+        val params = buildTaskbarLayoutParams(anchorTaskbarAtBottomEdge)
+        taskbarLayoutParams = params
+        taskbarRootView = wrapper
+        try {
+            wm.addView(wrapper, params)
+        } catch (e: Exception) {
+            Log.e("AppWindowOverlay", "Failed to attach taskbar overlay", e)
+            taskbarRootView = null
+            taskbarLayoutParams = null
+            taskbarCenterRow = null
+        }
+        updateClockLabels()
+    }
+
+    private fun buildTaskbarLayoutParams(anchorBottomEdge: Boolean): WindowManager.LayoutParams {
+        val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        val flags = if (anchorBottomEdge) {
+            baseFlags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        } else {
+            baseFlags
+        }
+        return WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             overlayWindowType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.START
@@ -568,17 +598,22 @@ class AppWindowOverlayService : Service() {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && anchorBottomEdge) {
+                fitInsetsTypes = 0
+            }
         }
+    }
 
-        taskbarRootView = wrapper
-        try {
-            wm.addView(wrapper, params)
-        } catch (e: Exception) {
-            Log.e("AppWindowOverlay", "Failed to attach taskbar overlay", e)
-            taskbarRootView = null
-            taskbarCenterRow = null
+    private fun updateTaskbarLayoutParamsIfNeeded() {
+        val view = taskbarRootView ?: return
+        val wm = windowManager ?: return
+        val currentFlags = taskbarLayoutParams?.flags ?: 0
+        val currentlyAnchored = (currentFlags and WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS) != 0
+        if (currentlyAnchored != anchorTaskbarAtBottomEdge) {
+            val updated = buildTaskbarLayoutParams(anchorTaskbarAtBottomEdge)
+            taskbarLayoutParams = updated
+            runCatching { wm.updateViewLayout(view, updated) }
         }
-        updateClockLabels()
     }
 
     private fun renderTaskbarSnapshot(snapshot: TaskbarOverlaySnapshot) {
@@ -589,6 +624,16 @@ class AppWindowOverlayService : Service() {
 
         val container = taskbarCenterRow ?: return
         container.removeAllViews()
+
+        // 0. Discreet Back / Return to Desktop button
+        container.addView(
+            createTaskbarSymbolSlot(
+                symbol = "‹",
+                contentDesc = "Voltar ao Fluent 11",
+                textColor = COLOR_TEXT_SECONDARY,
+                onClick = { onMinimizeClicked() }
+            )
+        )
 
         // 1. Start Menu button (4-tile Fluent logo)
         container.addView(
@@ -910,6 +955,7 @@ class AppWindowOverlayService : Service() {
         if (view != null) {
             runCatching { windowManager?.removeViewImmediate(view) }
             taskbarRootView = null
+            taskbarLayoutParams = null
             taskbarCenterRow = null
         }
     }
@@ -991,6 +1037,7 @@ class AppWindowOverlayService : Service() {
         const val EXTRA_WINDOW_SIZE_MODE = "extra_window_size_mode"
         const val EXTRA_FORCE_LANDSCAPE = "extra_force_landscape"
         const val EXTRA_KEEP_TASKBAR = "extra_keep_taskbar"
+        const val EXTRA_ANCHOR_BOTTOM_EDGE = "extra_anchor_bottom_edge"
         const val EXTRA_OVERLAY_TARGET = "extra_overlay_target"
         const val EXTRA_WINDOW_ID = "extra_window_id"
 
@@ -1022,7 +1069,8 @@ class AppWindowOverlayService : Service() {
             appLabel: String,
             sizeMode: WindowSizeMode,
             forceLandscape: Boolean,
-            keepTaskbarOverApps: Boolean
+            keepTaskbarOverApps: Boolean,
+            anchorTaskbarAtBottomEdge: Boolean
         ) {
             if (!Settings.canDrawOverlays(context)) return
             val intent = Intent(context, AppWindowOverlayService::class.java).apply {
@@ -1031,6 +1079,7 @@ class AppWindowOverlayService : Service() {
                 putExtra(EXTRA_WINDOW_SIZE_MODE, sizeMode.key)
                 putExtra(EXTRA_FORCE_LANDSCAPE, forceLandscape)
                 putExtra(EXTRA_KEEP_TASKBAR, keepTaskbarOverApps)
+                putExtra(EXTRA_ANCHOR_BOTTOM_EDGE, anchorTaskbarAtBottomEdge)
             }
             runCatching {
                 ContextCompat.startForegroundService(context, intent)

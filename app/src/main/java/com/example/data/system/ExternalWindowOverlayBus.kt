@@ -32,7 +32,8 @@ data class TaskbarOverlaySnapshot(
     val isCharging: Boolean = false,
     val wifiConnected: Boolean = false,
     val weatherTempLabel: String? = null,
-    val keepTaskbarOverApps: Boolean = true
+    val keepTaskbarOverApps: Boolean = true,
+    val anchorTaskbarAtBottomEdge: Boolean = false
 )
 
 sealed interface ExternalWindowAction {

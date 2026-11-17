@@ -29,6 +29,7 @@ class LauncherPreferencesRepository(private val context: Context) {
         val USE_FREEFORM_BOUNDS = booleanPreferencesKey("use_freeform_bounds")
         val DEFAULT_WINDOW_MODE = stringPreferencesKey("default_window_mode")
         val KEEP_TASKBAR_OVER_APPS = booleanPreferencesKey("keep_taskbar_over_apps")
+        val ANCHOR_TASKBAR_BOTTOM_EDGE = booleanPreferencesKey("anchor_taskbar_bottom_edge")
     }
 
     val preferencesFlow: Flow<LauncherPreferences> = context.launcherDataStore.data.map { prefs ->
@@ -43,7 +44,8 @@ class LauncherPreferencesRepository(private val context: Context) {
             defaultWindowMode = WindowSizeMode.fromKey(
                 prefs[Keys.DEFAULT_WINDOW_MODE] ?: WindowSizeMode.MAXIMIZED.key
             ),
-            keepTaskbarOverApps = prefs[Keys.KEEP_TASKBAR_OVER_APPS] ?: true
+            keepTaskbarOverApps = prefs[Keys.KEEP_TASKBAR_OVER_APPS] ?: true,
+            anchorTaskbarAtBottomEdge = prefs[Keys.ANCHOR_TASKBAR_BOTTOM_EDGE] ?: false
         )
     }
 
@@ -98,6 +100,12 @@ class LauncherPreferencesRepository(private val context: Context) {
     suspend fun setKeepTaskbarOverApps(enabled: Boolean) {
         context.launcherDataStore.edit { prefs ->
             prefs[Keys.KEEP_TASKBAR_OVER_APPS] = enabled
+        }
+    }
+
+    suspend fun setAnchorTaskbarAtBottomEdge(enabled: Boolean) {
+        context.launcherDataStore.edit { prefs ->
+            prefs[Keys.ANCHOR_TASKBAR_BOTTOM_EDGE] = enabled
         }
     }
 }

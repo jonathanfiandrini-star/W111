@@ -71,6 +71,7 @@ import com.example.ui.components.CopilotFlyout
 import com.example.ui.components.DesktopContextMenuDialog
 import com.example.ui.components.DesktopGridArea
 import com.example.ui.components.FloatingFolderWindow
+import com.example.ui.components.GestureNavigationGuideDialog
 import com.example.ui.components.LauncherSettingsWindow
 import com.example.ui.components.MoveToFolderDialog
 import com.example.ui.components.NotesDesktopWindow
@@ -226,6 +227,7 @@ fun Fluent11LauncherScreen(
         uiState.showDesktopContextMenu ||
         uiState.taskbarPopoverWindowId != null ||
         uiState.pendingOverlayPermissionLaunch != null ||
+        uiState.showGestureGuideDialog ||
         visibleInternalWindows.isNotEmpty() ||
         showCreateFolderDialog ||
         renameTargetItem != null ||
@@ -234,6 +236,7 @@ fun Fluent11LauncherScreen(
     // On a HOME launcher, back button closes active dialogs/flyouts/windows cleanly instead of exiting
     BackHandler(enabled = hasAnyOverlay) {
         when {
+            uiState.showGestureGuideDialog -> viewModel.dismissGestureGuideDialog()
             uiState.pendingOverlayPermissionLaunch != null -> viewModel.dismissOverlayPermissionPrompt()
             showCreateFolderDialog -> showCreateFolderDialog = false
             renameTargetItem != null -> renameTargetItem = null
@@ -389,11 +392,12 @@ fun Fluent11LauncherScreen(
                                     onToggleForceLandscapeApps = { viewModel.setForceLandscapeApps(it) },
                                     onToggleFreeformBounds = { viewModel.setUseFreeformLaunchBounds(it) },
                                     onToggleKeepTaskbarOverApps = { viewModel.setKeepTaskbarOverApps(it) },
+                                    onToggleAnchorBottomEdge = { viewModel.setAnchorTaskbarAtBottomEdge(it) },
                                     onRequestWriteSettingsPermission = { viewModel.openWriteSettingsPermission() },
                                     onRequestOverlayPermission = { viewModel.openOverlayPermissionSettings() },
                                     onOpenDeveloperSettings = { viewModel.openDeveloperSettings() },
                                     onOpenDefaultHomeSettings = onRequestDefaultLauncher,
-                                    onOpenNavigationSettings = { viewModel.openSystemNavigationSettings() }
+                                    onOpenNavigationSettings = { viewModel.openGestureGuideDialog() }
                                 )
                             }
                             DesktopWindowKind.INTERNAL_NOTES -> {
@@ -551,7 +555,7 @@ fun Fluent11LauncherScreen(
                         onBrightnessChange = { viewModel.setWindowBrightness(it) },
                         onVolumeChange = { viewModel.setMediaVolume(it) },
                         onOpenSystemSettings = { viewModel.openSystemSettings() },
-                        onOpenNavigationSettings = { viewModel.openSystemNavigationSettings() }
+                        onOpenNavigationSettings = { viewModel.openGestureGuideDialog() }
                     )
                 }
 
@@ -609,6 +613,7 @@ fun Fluent11LauncherScreen(
             }
 
             // Bottom Windows 11 Centered Taskbar
+            val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
             Taskbar(
                 activeOverlay = uiState.activeOverlay,
                 pinnedApps = uiState.taskbarPinnedApps,
@@ -618,6 +623,8 @@ fun Fluent11LauncherScreen(
                 telemetry = uiState.telemetry,
                 weatherState = uiState.weatherState,
                 currentTimeMillis = uiState.currentTimeMillis,
+                anchorAtBottomEdge = uiState.preferences.anchorTaskbarAtBottomEdge,
+                onBackClick = { activity?.onBackPressedDispatcher?.onBackPressed() },
                 onToggleStart = { viewModel.toggleOverlay(ActiveOverlay.StartMenu) },
                 onToggleSearch = { viewModel.toggleOverlay(ActiveOverlay.Search) },
                 onToggleCopilot = { viewModel.toggleOverlay(ActiveOverlay.Copilot) },
@@ -715,6 +722,15 @@ fun Fluent11LauncherScreen(
             onGrantPermission = { viewModel.confirmOverlayPermissionSetup() },
             onContinueWithoutOverlay = { viewModel.launchPendingAppWithoutOverlay() },
             onDismiss = { viewModel.dismissOverlayPermissionPrompt() }
+        )
+    }
+
+    if (uiState.showGestureGuideDialog) {
+        GestureNavigationGuideDialog(
+            anchorTaskbarAtBottomEdge = uiState.preferences.anchorTaskbarAtBottomEdge,
+            onToggleAnchorBottomEdge = { viewModel.setAnchorTaskbarAtBottomEdge(it) },
+            onOpenSystemSettings = { viewModel.openSystemNavigationSettings() },
+            onDismiss = { viewModel.dismissGestureGuideDialog() }
         )
     }
 }

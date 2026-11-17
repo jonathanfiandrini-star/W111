@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -33,6 +34,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -385,6 +388,118 @@ fun OverlayPermissionPromptDialog(
                 modifier = Modifier.testTag("overlay_prompt_skip_btn")
             ) {
                 Text("Abrir sem barra", color = Win11TextSecondary)
+            }
+        }
+    )
+}
+
+@Composable
+fun GestureNavigationGuideDialog(
+    anchorTaskbarAtBottomEdge: Boolean,
+    onToggleAnchorBottomEdge: (Boolean) -> Unit,
+    onOpenSystemSettings: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        modifier = Modifier.testTag("gesture_nav_guide_dialog"),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.Fullscreen,
+                    contentDescription = null,
+                    tint = Win11AccentCyan,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Colocar barra no lugar dos botões",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Win11TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Por segurança do Android, outros apps mantêm os 3 botões inferiores até você ativar a Navegação por Gestos no tablet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Win11TextSecondary
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "Passo a passo no tablet / HyperOS:",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Win11AccentCyan
+                    )
+                    Text(
+                        text = "1. Toque em \"Abrir Configurações\" abaixo.\n2. Entre em Tela inicial (ou Tela) → Navegação do sistema.\n3. Troque \"Botões\" por \"Gestos\" e marque \"Ocultar indicador de tela cheia\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Win11TextPrimary
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Colar Barra na borda 0px",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Win11TextPrimary
+                        )
+                        Text(
+                            text = "Ative após mudar para Gestos para encostar a barra no último pixel inferior",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Win11TextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = anchorTaskbarAtBottomEdge,
+                        onCheckedChange = onToggleAnchorBottomEdge,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Win11NavyBg,
+                            checkedTrackColor = Win11AccentCyan
+                        ),
+                        modifier = Modifier.testTag("gesture_guide_anchor_switch")
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onOpenSystemSettings,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Win11AccentCyan,
+                    contentColor = Win11NavyBg
+                ),
+                modifier = Modifier.testTag("gesture_guide_open_settings_btn")
+            ) {
+                Text("Abrir Configurações")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("gesture_guide_close_btn")
+            ) {
+                Text("Fechar", color = Win11TextSecondary)
             }
         }
     )

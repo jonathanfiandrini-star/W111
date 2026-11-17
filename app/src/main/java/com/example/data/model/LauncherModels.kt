@@ -88,7 +88,8 @@ data class LauncherPreferences(
     val forceLandscapeApps: Boolean = true,
     val useFreeformLaunchBounds: Boolean = false,
     val defaultWindowMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
-    val keepTaskbarOverApps: Boolean = true
+    val keepTaskbarOverApps: Boolean = true,
+    val anchorTaskbarAtBottomEdge: Boolean = false
 )
 
 data class SystemTelemetry(

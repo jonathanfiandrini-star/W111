@@ -191,6 +191,7 @@ class LauncherRepository(
     suspend fun setUseFreeformLaunchBounds(enabled: Boolean) = prefsRepo.setUseFreeformLaunchBounds(enabled)
     suspend fun setDefaultWindowMode(mode: WindowSizeMode) = prefsRepo.setDefaultWindowMode(mode)
     suspend fun setKeepTaskbarOverApps(enabled: Boolean) = prefsRepo.setKeepTaskbarOverApps(enabled)
+    suspend fun setAnchorTaskbarAtBottomEdge(enabled: Boolean) = prefsRepo.setAnchorTaskbarAtBottomEdge(enabled)
 
     suspend fun fetchWeather(cityQuery: String): WeatherState = withContext(Dispatchers.IO) {
         try {

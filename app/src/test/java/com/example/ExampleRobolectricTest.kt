@@ -137,6 +137,9 @@ class ExampleRobolectricTest {
         composeRule.onNodeWithTag("settings_keep_taskbar_switch")
             .performScrollTo()
             .assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_anchor_bottom_switch")
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onNodeWithTag("settings_gesture_nav_btn")
             .performScrollTo()
             .assertIsDisplayed()
@@ -180,5 +183,26 @@ class ExampleRobolectricTest {
             .performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("overlay_permission_dialog").assertDoesNotExist()
+    }
+
+    @Test
+    fun `taskbar displays discreet back button and action center opens gesture guide dialog`() {
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("taskbar_back_button").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("taskbar_system_tray").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("action_tile_gesture_nav").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("gesture_nav_guide_dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("gesture_guide_anchor_switch")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("gesture_guide_open_settings_btn").assertIsDisplayed()
+        composeRule.onNodeWithTag("gesture_guide_close_btn").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("gesture_nav_guide_dialog").assertDoesNotExist()
     }
 }

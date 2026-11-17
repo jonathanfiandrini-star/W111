@@ -98,6 +98,7 @@ fun BoxScope.LauncherSettingsWindow(
     onToggleForceLandscapeApps: (Boolean) -> Unit,
     onToggleFreeformBounds: (Boolean) -> Unit,
     onToggleKeepTaskbarOverApps: (Boolean) -> Unit,
+    onToggleAnchorBottomEdge: (Boolean) -> Unit,
     onRequestWriteSettingsPermission: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
@@ -417,6 +418,34 @@ fun BoxScope.LauncherSettingsWindow(
                                 checkedTrackColor = Win11AccentCyan
                             ),
                             modifier = Modifier.testTag("settings_keep_taskbar_switch")
+                        )
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Colar Barra na borda 0px (modo Gestos)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Win11TextPrimary
+                            )
+                            Text(
+                                text = "Encosta a Barra de Tarefas no último pixel inferior após mudar o tablet para Gestos",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Win11TextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = preferences.anchorTaskbarAtBottomEdge,
+                            onCheckedChange = onToggleAnchorBottomEdge,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Win11NavyBg,
+                                checkedTrackColor = Win11AccentCyan
+                            ),
+                            modifier = Modifier.testTag("settings_anchor_bottom_switch")
                         )
                     }
 

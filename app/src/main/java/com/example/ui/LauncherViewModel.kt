@@ -70,7 +70,8 @@ data class LauncherUiState(
     val openWindows: List<DesktopWindowState> = emptyList(),
     val activeWindowId: String? = null,
     val taskbarPopoverWindowId: String? = null,
-    val pendingOverlayPermissionLaunch: PendingAppLaunch? = null
+    val pendingOverlayPermissionLaunch: PendingAppLaunch? = null,
+    val showGestureGuideDialog: Boolean = false
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -94,6 +95,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val activeWindowIdFlow = MutableStateFlow<String?>(null)
     private val taskbarPopoverWindowIdFlow = MutableStateFlow<String?>(null)
     private val pendingOverlayPermissionLaunchFlow = MutableStateFlow<PendingAppLaunch?>(null)
+    private val showGestureGuideDialogFlow = MutableStateFlow(false)
     private var pendingPermissionReturnLaunch: PendingAppLaunch? = null
     private var lastExternalLaunchAtMs: Long = 0L
     private var hasPromptedDefaultLauncherThisSession = false
@@ -126,7 +128,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val timeMillis: Long,
         val banner: String?,
         val contextMenu: Boolean,
-        val pendingLaunch: PendingAppLaunch?
+        val pendingLaunch: PendingAppLaunch?,
+        val showGestureGuide: Boolean
     )
 
     private val coreStreamsFlow = combine(
@@ -156,7 +159,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         currentTimeFlow,
         statusBannerFlow,
         desktopContextMenuFlow,
-        pendingOverlayPermissionLaunchFlow
+        pendingOverlayPermissionLaunchFlow,
+        showGestureGuideDialogFlow
     ) { arr ->
         @Suppress("UNCHECKED_CAST")
         WindowStreams(
@@ -166,7 +170,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             timeMillis = arr[3] as Long,
             banner = arr[4] as String?,
             contextMenu = arr[5] as Boolean,
-            pendingLaunch = arr[6] as PendingAppLaunch?
+            pendingLaunch = arr[6] as PendingAppLaunch?,
+            showGestureGuide = arr[7] as Boolean
         )
     }
 
@@ -205,7 +210,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             openWindows = win.windows,
             activeWindowId = win.activeWindowId,
             taskbarPopoverWindowId = win.popoverWindowId,
-            pendingOverlayPermissionLaunch = win.pendingLaunch
+            pendingOverlayPermissionLaunch = win.pendingLaunch,
+            showGestureGuideDialog = win.showGestureGuide
         )
     }.stateIn(
         scope = viewModelScope,
@@ -269,7 +275,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     isCharging = controls.telemetry.isCharging,
                     wifiConnected = controls.telemetry.wifiConnected,
                     weatherTempLabel = weatherTemp,
-                    keepTaskbarOverApps = controls.prefs.keepTaskbarOverApps
+                    keepTaskbarOverApps = controls.prefs.keepTaskbarOverApps,
+                    anchorTaskbarAtBottomEdge = controls.prefs.anchorTaskbarAtBottomEdge
                 )
             }.collect { snapshot ->
                 ExternalWindowOverlayBus.updateTaskbarSnapshot(snapshot)
@@ -639,7 +646,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 appLabel = appLabel,
                 sizeMode = modeToUse,
                 forceLandscape = prefs.forceLandscapeApps,
-                keepTaskbarOverApps = prefs.keepTaskbarOverApps
+                keepTaskbarOverApps = prefs.keepTaskbarOverApps,
+                anchorTaskbarAtBottomEdge = prefs.anchorTaskbarAtBottomEdge
             )
         }
 
@@ -851,6 +859,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 else "Barra de Tarefas oculta ao abrir aplicativos"
             )
         }
+    }
+
+    fun setAnchorTaskbarAtBottomEdge(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setAnchorTaskbarAtBottomEdge(enabled)
+            showBanner(
+                if (enabled) "Barra colada na borda 0px (recomendado com Gestos)"
+                else "Barra ajustada acima da navegação do sistema"
+            )
+        }
+    }
+
+    fun openGestureGuideDialog() {
+        dismissOverlay()
+        showGestureGuideDialogFlow.value = true
+    }
+
+    fun dismissGestureGuideDialog() {
+        showGestureGuideDialogFlow.value = false
     }
 
     // --- Copilot AI (Firebase AI Logic) ---
