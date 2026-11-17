@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.text.TextUtils
+import android.util.Log
 import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
@@ -355,12 +356,18 @@ class AppWindowOverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
             x = dp(14)
             y = dp(32)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
         }
 
         var startX = 0
@@ -404,7 +411,12 @@ class AppWindowOverlayService : Service() {
 
         captionLayoutParams = params
         captionRootView = container
-        runCatching { wm.addView(container, params) }
+        try {
+            wm.addView(container, params)
+        } catch (e: Exception) {
+            Log.e("AppWindowOverlay", "Failed to attach caption overlay", e)
+            captionRootView = null
+        }
     }
 
     private fun ensureTaskbarOverlayAttached() {
@@ -546,16 +558,28 @@ class AppWindowOverlayService : Service() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             overlayWindowType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.START
             x = 0
             y = navInsetBottom
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
         }
 
         taskbarRootView = wrapper
-        runCatching { wm.addView(wrapper, params) }
+        try {
+            wm.addView(wrapper, params)
+        } catch (e: Exception) {
+            Log.e("AppWindowOverlay", "Failed to attach taskbar overlay", e)
+            taskbarRootView = null
+            taskbarCenterRow = null
+        }
         updateClockLabels()
     }
 
@@ -817,7 +841,7 @@ class AppWindowOverlayService : Service() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(42), dp(36))
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(40))
             background = GradientDrawable().apply {
                 setColor(bgColor)
                 cornerRadius = dp(7).toFloat()

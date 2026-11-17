@@ -21,18 +21,27 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,6 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.DesktopItemEntity
@@ -60,6 +71,7 @@ import com.example.ui.components.FloatingFolderWindow
 import com.example.ui.components.LauncherSettingsWindow
 import com.example.ui.components.MoveToFolderDialog
 import com.example.ui.components.NotesDesktopWindow
+import com.example.ui.components.OverlayPermissionPromptDialog
 import com.example.ui.components.SearchFlyout
 import com.example.ui.components.StartMenuFlyout
 import com.example.ui.components.Taskbar
@@ -68,6 +80,7 @@ import com.example.ui.components.TextInputDialog
 import com.example.ui.components.WallpaperBackground
 import com.example.ui.components.WidgetsPanelFlyout
 import com.example.ui.theme.Fluent11Theme
+import com.example.ui.theme.Win11AccentCyan
 import com.example.ui.theme.Win11BorderHighlight
 import com.example.ui.theme.Win11MicaSurface
 import com.example.ui.theme.Win11TextPrimary
@@ -191,6 +204,7 @@ fun Fluent11LauncherScreen(
     val hasAnyOverlay = uiState.activeOverlay != ActiveOverlay.None ||
         uiState.showDesktopContextMenu ||
         uiState.taskbarPopoverWindowId != null ||
+        uiState.pendingOverlayPermissionLaunch != null ||
         visibleInternalWindows.isNotEmpty() ||
         showCreateFolderDialog ||
         renameTargetItem != null ||
@@ -199,6 +213,7 @@ fun Fluent11LauncherScreen(
     // On a HOME launcher, back button closes active dialogs/flyouts/windows cleanly instead of exiting
     BackHandler(enabled = hasAnyOverlay) {
         when {
+            uiState.pendingOverlayPermissionLaunch != null -> viewModel.dismissOverlayPermissionPrompt()
             showCreateFolderDialog -> showCreateFolderDialog = false
             renameTargetItem != null -> renameTargetItem = null
             moveTargetItem != null -> moveTargetItem = null
@@ -253,6 +268,49 @@ fun Fluent11LauncherScreen(
                     },
                     onRequestCreateFolder = { showCreateFolderDialog = true }
                 )
+
+                // Subtle Setup Pill when overlay permission is missing and no window/overlay is open
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !uiState.telemetry.canDrawOverlays &&
+                        uiState.statusBanner == null &&
+                        uiState.activeOverlay == ActiveOverlay.None &&
+                        visibleInternalWindows.isEmpty(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 10.dp, end = 12.dp)
+                ) {
+                    Surface(
+                        color = Win11MicaSurface,
+                        shape = RoundedCornerShape(20.dp),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .clip(RoundedCornerShape(20.dp))
+                            .border(1.dp, Win11BorderHighlight, RoundedCornerShape(20.dp))
+                            .clickable { viewModel.openOverlayPermissionSettings() }
+                            .testTag("desktop_overlay_setup_chip")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Layers,
+                                contentDescription = null,
+                                tint = Win11AccentCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Ativar barra e controles sobre apps",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Win11TextPrimary
+                            )
+                        }
+                    }
+                }
 
                 // Visible Desktop Windows (Folders, Settings, Notes) ordered by focus timestamp
                 visibleInternalWindows.forEach { win ->
@@ -624,6 +682,16 @@ fun Fluent11LauncherScreen(
                     viewModel.dismissOverlay()
                 }
             }
+        )
+    }
+
+    val pendingLaunch = uiState.pendingOverlayPermissionLaunch
+    if (pendingLaunch != null) {
+        OverlayPermissionPromptDialog(
+            targetAppLabel = pendingLaunch.appLabel,
+            onGrantPermission = { viewModel.confirmOverlayPermissionSetup() },
+            onContinueWithoutOverlay = { viewModel.launchPendingAppWithoutOverlay() },
+            onDismiss = { viewModel.dismissOverlayPermissionPrompt() }
         )
     }
 }

@@ -311,3 +311,81 @@ fun AddAppPickerDialog(
         }
     )
 }
+
+@Composable
+fun OverlayPermissionPromptDialog(
+    targetAppLabel: String,
+    onGrantPermission: () -> Unit,
+    onContinueWithoutOverlay: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        modifier = Modifier.testTag("overlay_permission_dialog"),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = null,
+                    tint = Win11AccentCyan,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Ativar barra sobre aplicativos",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Win11TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Para manter a Barra de Tarefas fixa embaixo e mostrar os botões de minimizar, redimensionar e fechar ao abrir \"$targetAppLabel\", ative a permissão \"Sobrepor a outros apps\" para o Fluent 11.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Win11TextPrimary
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "Como ativar:",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Win11AccentCyan
+                    )
+                    Text(
+                        text = "1. Toque em \"Ativar agora\" abaixo.\n2. Ative a chave para o Fluent 11.\n3. Volte para abrir o aplicativo automaticamente com a barra ativa.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Win11TextSecondary
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onGrantPermission,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Win11AccentCyan,
+                    contentColor = Win11NavyBg
+                ),
+                modifier = Modifier.testTag("overlay_prompt_grant_btn")
+            ) {
+                Text("Ativar agora")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onContinueWithoutOverlay,
+                modifier = Modifier.testTag("overlay_prompt_skip_btn")
+            ) {
+                Text("Abrir sem barra", color = Win11TextSecondary)
+            }
+        }
+    )
+}

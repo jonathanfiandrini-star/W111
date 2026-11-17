@@ -148,3 +148,9 @@ data class CopilotUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null
 )
+
+data class PendingAppLaunch(
+    val packageName: String,
+    val appLabel: String,
+    val windowSizeMode: WindowSizeMode
+)

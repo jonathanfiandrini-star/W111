@@ -156,4 +156,25 @@ class ExampleRobolectricTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("copilot_flyout").assertIsDisplayed()
     }
+
+    @Test
+    fun `missing overlay permission shows setup chip and guided launch prompt`() {
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("desktop_overlay_setup_chip").assertIsDisplayed()
+
+        composeRule.activity.runOnUiThread {
+            val vm = androidx.lifecycle.ViewModelProvider(composeRule.activity)[
+                com.example.ui.LauncherViewModel::class.java
+            ]
+            vm.launchApp("com.example.fakeapp")
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("overlay_permission_dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("overlay_prompt_grant_btn").assertIsDisplayed()
+        composeRule.onNodeWithTag("overlay_prompt_skip_btn")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("overlay_permission_dialog").assertDoesNotExist()
+    }
 }

@@ -15,6 +15,7 @@ import com.example.data.model.DesktopWindowState
 import com.example.data.model.GridDensity
 import com.example.data.model.InstalledApp
 import com.example.data.model.LauncherPreferences
+import com.example.data.model.PendingAppLaunch
 import com.example.data.model.PinTarget
 import com.example.data.model.StickyNoteColor
 import com.example.data.model.SystemTelemetry
@@ -68,7 +69,8 @@ data class LauncherUiState(
     val showDesktopContextMenu: Boolean = false,
     val openWindows: List<DesktopWindowState> = emptyList(),
     val activeWindowId: String? = null,
-    val taskbarPopoverWindowId: String? = null
+    val taskbarPopoverWindowId: String? = null,
+    val pendingOverlayPermissionLaunch: PendingAppLaunch? = null
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -91,6 +93,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val openWindowsFlow = MutableStateFlow<List<DesktopWindowState>>(emptyList())
     private val activeWindowIdFlow = MutableStateFlow<String?>(null)
     private val taskbarPopoverWindowIdFlow = MutableStateFlow<String?>(null)
+    private val pendingOverlayPermissionLaunchFlow = MutableStateFlow<PendingAppLaunch?>(null)
+    private var pendingPermissionReturnLaunch: PendingAppLaunch? = null
+    private var lastExternalLaunchAtMs: Long = 0L
     private var hasPromptedDefaultLauncherThisSession = false
 
     private val copilotRepository = CopilotRepository()
@@ -120,7 +125,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val popoverWindowId: String?,
         val timeMillis: Long,
         val banner: String?,
-        val contextMenu: Boolean
+        val contextMenu: Boolean,
+        val pendingLaunch: PendingAppLaunch?
     )
 
     private val coreStreamsFlow = combine(
@@ -149,7 +155,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         taskbarPopoverWindowIdFlow,
         currentTimeFlow,
         statusBannerFlow,
-        desktopContextMenuFlow
+        desktopContextMenuFlow,
+        pendingOverlayPermissionLaunchFlow
     ) { arr ->
         @Suppress("UNCHECKED_CAST")
         WindowStreams(
@@ -158,7 +165,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             popoverWindowId = arr[2] as String?,
             timeMillis = arr[3] as Long,
             banner = arr[4] as String?,
-            contextMenu = arr[5] as Boolean
+            contextMenu = arr[5] as Boolean,
+            pendingLaunch = arr[6] as PendingAppLaunch?
         )
     }
 
@@ -196,7 +204,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             showDesktopContextMenu = win.contextMenu,
             openWindows = win.windows,
             activeWindowId = win.activeWindowId,
-            taskbarPopoverWindowId = win.popoverWindowId
+            taskbarPopoverWindowId = win.popoverWindowId,
+            pendingOverlayPermissionLaunch = win.pendingLaunch
         )
     }.stateIn(
         scope = viewModelScope,
@@ -357,6 +366,30 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onLauncherResumed() {
+        val waitingLaunch = pendingPermissionReturnLaunch
+        if (waitingLaunch != null) {
+            pendingPermissionReturnLaunch = null
+            refreshTelemetry()
+            if (repository.canDrawOverlays()) {
+                showBanner("Sobreposição ativada! Abrindo ${waitingLaunch.appLabel}...")
+                launchApp(
+                    packageName = waitingLaunch.packageName,
+                    overrideSizeMode = waitingLaunch.windowSizeMode,
+                    bypassOverlayPrompt = true
+                )
+                return
+            } else {
+                showBanner("Permissão de sobreposição ainda desativada")
+            }
+        }
+
+        // Guard against transient onResume events fired right as an external app is launching
+        val elapsedSinceLaunch = System.currentTimeMillis() - lastExternalLaunchAtMs
+        if (lastExternalLaunchAtMs > 0L && elapsedSinceLaunch in 0L..1500L) {
+            refreshTelemetry()
+            return
+        }
+
         AppWindowOverlayService.stopOverlay(getApplication())
         ExternalWindowOverlayBus.clearSession()
         // When returning from an external app, mark external app windows as minimized in the Taskbar
@@ -561,17 +594,56 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun launchApp(packageName: String, overrideSizeMode: WindowSizeMode? = null) {
+    fun launchApp(
+        packageName: String,
+        overrideSizeMode: WindowSizeMode? = null,
+        bypassOverlayPrompt: Boolean = false
+    ) {
         val prefs = uiState.value.preferences
         val existingWin = openWindowsFlow.value.firstOrNull { it.windowId == "app_$packageName" }
         val modeToUse = overrideSizeMode ?: existingWin?.sizeMode ?: prefs.defaultWindowMode
-        val reserveTaskbarPx = if (prefs.keepTaskbarOverApps && repository.canDrawOverlays()) {
+        val appLabel = uiState.value.installedAppsByPackage[packageName]?.label ?: packageName
+        val hasOverlayPermission = repository.canDrawOverlays()
+
+        if (!hasOverlayPermission && !bypassOverlayPrompt) {
+            pendingOverlayPermissionLaunchFlow.value = PendingAppLaunch(
+                packageName = packageName,
+                appLabel = appLabel,
+                windowSizeMode = modeToUse
+            )
+            return
+        }
+
+        pendingOverlayPermissionLaunchFlow.value = null
+
+        val reserveTaskbarPx = if (prefs.keepTaskbarOverApps && hasOverlayPermission) {
             val density = getApplication<Application>().resources.displayMetrics.density
             (56f * density).roundToInt()
         } else {
             0
         }
 
+        // Start foreground overlay service BEFORE launching external app while launcher is still foreground
+        if (hasOverlayPermission) {
+            ExternalWindowOverlayBus.setSession(
+                ExternalAppSession(
+                    packageName = packageName,
+                    appLabel = appLabel,
+                    sizeMode = modeToUse,
+                    forceLandscape = prefs.forceLandscapeApps
+                )
+            )
+            AppWindowOverlayService.startOverlay(
+                context = getApplication(),
+                packageName = packageName,
+                appLabel = appLabel,
+                sizeMode = modeToUse,
+                forceLandscape = prefs.forceLandscapeApps,
+                keepTaskbarOverApps = prefs.keepTaskbarOverApps
+            )
+        }
+
+        lastExternalLaunchAtMs = System.currentTimeMillis()
         val launched = repository.launchApp(
             packageName = packageName,
             forceLandscape = prefs.forceLandscapeApps,
@@ -580,7 +652,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             reserveBottomTaskbarPx = reserveTaskbarPx
         )
         if (launched) {
-            val appLabel = uiState.value.installedAppsByPackage[packageName]?.label ?: packageName
             val winId = "app_$packageName"
             val now = System.currentTimeMillis()
             val updatedList = if (existingWin != null) {
@@ -608,30 +679,39 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             openWindowsFlow.value = updatedList
             activeWindowIdFlow.value = winId
 
-            ExternalWindowOverlayBus.setSession(
-                ExternalAppSession(
-                    packageName = packageName,
-                    appLabel = appLabel,
-                    sizeMode = modeToUse,
-                    forceLandscape = prefs.forceLandscapeApps
-                )
-            )
-            if (repository.canDrawOverlays()) {
-                AppWindowOverlayService.startOverlay(
-                    context = getApplication(),
-                    packageName = packageName,
-                    appLabel = appLabel,
-                    sizeMode = modeToUse,
-                    forceLandscape = prefs.forceLandscapeApps,
-                    keepTaskbarOverApps = prefs.keepTaskbarOverApps
-                )
-            }
-
             viewModelScope.launch { repository.recordAppLaunch(packageName) }
             dismissOverlay()
         } else {
+            lastExternalLaunchAtMs = 0L
+            if (hasOverlayPermission) {
+                AppWindowOverlayService.stopOverlay(getApplication())
+                ExternalWindowOverlayBus.clearSession()
+            }
             showBanner("Não foi possível abrir este aplicativo.")
         }
+    }
+
+    fun confirmOverlayPermissionSetup() {
+        val pending = pendingOverlayPermissionLaunchFlow.value
+        if (pending != null) {
+            pendingPermissionReturnLaunch = pending
+            pendingOverlayPermissionLaunchFlow.value = null
+        }
+        repository.openOverlayPermissionSettings()
+    }
+
+    fun launchPendingAppWithoutOverlay() {
+        val pending = pendingOverlayPermissionLaunchFlow.value ?: return
+        pendingOverlayPermissionLaunchFlow.value = null
+        launchApp(
+            packageName = pending.packageName,
+            overrideSizeMode = pending.windowSizeMode,
+            bypassOverlayPrompt = true
+        )
+    }
+
+    fun dismissOverlayPermissionPrompt() {
+        pendingOverlayPermissionLaunchFlow.value = null
     }
 
     fun openAppInfo(packageName: String) = repository.openAppInfo(packageName)
