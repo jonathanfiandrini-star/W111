@@ -1,0 +1,313 @@
+package com.example.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.CreateNewFolder
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.StickyNote2
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import com.example.data.local.DesktopItemEntity
+import com.example.data.model.InstalledApp
+import com.example.ui.theme.Win11AccentCyan
+import com.example.ui.theme.Win11CardSurface
+import com.example.ui.theme.Win11MicaSurface
+import com.example.ui.theme.Win11NavyBg
+import com.example.ui.theme.Win11TextPrimary
+import com.example.ui.theme.Win11TextSecondary
+
+@Composable
+fun DesktopContextMenuDialog(
+    onDismiss: () -> Unit,
+    onCreateFolder: () -> Unit,
+    onAddApp: () -> Unit,
+    onOpenNotes: () -> Unit,
+    onRefreshApps: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onSetDefaultLauncher: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        title = {
+            Text(
+                text = "Área de Trabalho",
+                style = MaterialTheme.typography.titleMedium,
+                color = Win11TextPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ContextOptionRow(
+                    icon = Icons.Rounded.CreateNewFolder,
+                    label = "Nova pasta",
+                    onClick = { onDismiss(); onCreateFolder() },
+                    testTag = "ctx_new_folder"
+                )
+                ContextOptionRow(
+                    icon = Icons.Rounded.Apps,
+                    label = "Adicionar aplicativo à área de trabalho",
+                    onClick = { onDismiss(); onAddApp() },
+                    testTag = "ctx_add_app"
+                )
+                ContextOptionRow(
+                    icon = Icons.Rounded.StickyNote2,
+                    label = "Abrir Notas Rápidas (Janela)",
+                    onClick = { onDismiss(); onOpenNotes() },
+                    testTag = "ctx_open_notes"
+                )
+                ContextOptionRow(
+                    icon = Icons.Rounded.Refresh,
+                    label = "Atualizar lista de aplicativos",
+                    onClick = { onDismiss(); onRefreshApps() },
+                    testTag = "ctx_refresh_apps"
+                )
+                ContextOptionRow(
+                    icon = Icons.Rounded.Tune,
+                    label = "Personalizar launcher",
+                    onClick = { onDismiss(); onOpenSettings() },
+                    testTag = "ctx_launcher_settings"
+                )
+                ContextOptionRow(
+                    icon = Icons.Rounded.Home,
+                    label = "Definir como launcher padrão",
+                    onClick = { onDismiss(); onSetDefaultLauncher() },
+                    testTag = "ctx_default_launcher"
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fechar", color = Win11AccentCyan)
+            }
+        }
+    )
+}
+
+@Composable
+private fun ContextOptionRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Win11CardSurface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
+            .testTag(testTag)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Win11AccentCyan,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Win11TextPrimary
+        )
+    }
+}
+
+@Composable
+fun TextInputDialog(
+    title: String,
+    initialValue: String,
+    label: String,
+    confirmText: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var value by remember { mutableStateOf(initialValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        title = { Text(title, color = Win11TextPrimary) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                label = { Text(label) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("text_input_dialog_field")
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(value) },
+                enabled = value.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Win11AccentCyan,
+                    contentColor = Win11NavyBg
+                )
+            ) {
+                Text(confirmText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = Win11TextSecondary)
+            }
+        }
+    )
+}
+
+@Composable
+fun MoveToFolderDialog(
+    folders: List<DesktopItemEntity>,
+    onDismiss: () -> Unit,
+    onSelectFolder: (Long) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        title = { Text("Mover para pasta", color = Win11TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                folders.forEach { folder ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Win11CardSurface)
+                            .clickable { onSelectFolder(folder.id) }
+                            .padding(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Folder,
+                            contentDescription = null,
+                            tint = Win11AccentCyan
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(folder.title, color = Win11TextPrimary)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = Win11TextSecondary)
+            }
+        }
+    )
+}
+
+@Composable
+fun AddAppPickerDialog(
+    installedApps: List<InstalledApp>,
+    targetFolderTitle: String?,
+    onDismiss: () -> Unit,
+    onSelectApp: (InstalledApp) -> Unit
+) {
+    var filter by remember { mutableStateOf("") }
+    val filtered = remember(filter, installedApps) {
+        if (filter.isBlank()) installedApps
+        else installedApps.filter { it.label.contains(filter.trim(), ignoreCase = true) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        title = {
+            Text(
+                text = if (targetFolderTitle != null) "Adicionar à pasta \"$targetFolderTitle\""
+                else "Adicionar aplicativo à área de trabalho",
+                color = Win11TextPrimary
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = filter,
+                    onValueChange = { filter = it },
+                    placeholder = { Text("Filtrar aplicativos...") },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = Win11AccentCyan)
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.heightIn(max = 260.dp)
+                ) {
+                    items(filtered, key = { it.packageName }) { app ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Win11CardSurface)
+                                .clickable { onSelectApp(app) }
+                                .padding(10.dp)
+                        ) {
+                            AppIconTile(app = app, sizeDp = 30)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = app.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Win11TextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fechar", color = Win11AccentCyan)
+            }
+        }
+    )
+}

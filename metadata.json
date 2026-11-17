@@ -1,0 +1,6 @@
+{
+  "name": "Fluent 11 Launcher",
+  "description": "Launcher Android em estilo desktop horizontal inspirado no Windows 11 com tema Mica escuro, barra de tarefas centralizada, Menu Iniciar, pastas, Central de Ações e widgets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Fluent 11</string>
+    <string name="cd_start_button">Abrir Menu Iniciar</string>
+    <string name="cd_search_button">Pesquisar aplicativos e notas</string>
+    <string name="cd_widgets_button">Abrir painel de Widgets</string>
+    <string name="cd_action_center">Abrir Central de Ações</string>
+    <string name="cd_desktop_overview">Gerenciar área de trabalho</string>
+    <string name="cd_close_window">Fechar janela</string>
+    <string name="cd_add_note">Nova nota rápida</string>
+    <string name="cd_refresh_weather">Atualizar clima</string>
+</resources>
