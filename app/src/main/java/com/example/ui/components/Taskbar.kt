@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -51,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -546,6 +550,11 @@ private fun TaskbarPinnedAppButton(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (isActive) 18.dp else if (isOpen) 10.dp else 5.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "pinnedIndicatorWidth"
+    )
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
@@ -564,7 +573,7 @@ private fun TaskbarPinnedAppButton(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 2.dp)
-                .width(if (isActive) 18.dp else if (isOpen) 10.dp else 5.dp)
+                .width(indicatorWidth)
                 .height(3.dp)
                 .clip(CircleShape)
                 .background(
@@ -583,6 +592,11 @@ private fun TaskbarOpenWindowButton(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (isActive) 18.dp else 10.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "openWinIndicatorWidth"
+    )
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
@@ -618,7 +632,7 @@ private fun TaskbarOpenWindowButton(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 2.dp)
-                .width(if (isActive) 18.dp else 10.dp)
+                .width(indicatorWidth)
                 .height(3.dp)
                 .clip(CircleShape)
                 .background(Win11AccentCyan)

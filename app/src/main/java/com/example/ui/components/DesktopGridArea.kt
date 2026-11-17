@@ -1,10 +1,16 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +26,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
@@ -35,16 +44,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import com.example.data.local.DesktopItemEntity
 import com.example.data.model.DesktopItemType
 import com.example.data.model.GridDensity
@@ -55,12 +68,16 @@ import com.example.ui.theme.Win11CardSurface
 import com.example.ui.theme.Win11MicaSurface
 import com.example.ui.theme.Win11TextPrimary
 import com.example.ui.theme.Win11TextSecondary
+import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DesktopGridArea(
     rootItems: List<DesktopItemEntity>,
     allItems: List<DesktopItemEntity>,
     appsByPackage: Map<String, InstalledApp>,
+    installedApps: List<InstalledApp> = emptyList(),
     gridDensity: GridDensity,
     showLabels: Boolean,
     onLaunchApp: (String) -> Unit,
@@ -79,96 +96,280 @@ fun DesktopGridArea(
         rootItems.filter { it.type == DesktopItemType.FOLDER.name }
     }
 
-    if (rootItems.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
+    val appPages = remember(installedApps) {
+        if (installedApps.isEmpty()) emptyList() else installedApps.chunked(24)
+    }
+    val totalPages = 1 + appPages.size
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { totalPages })
+    val coroutineScope = rememberCoroutineScope()
+
+    Box(modifier = modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            beyondViewportPageCount = 1,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = if (totalPages > 1) 34.dp else 0.dp)
+                .testTag("desktop_pager")
+        ) { page ->
+            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+            val depthScale = lerp(0.94f, 1f, (1f - pageOffset).coerceIn(0f, 1f))
+            val depthAlpha = lerp(0.58f, 1f, (1f - pageOffset).coerceIn(0f, 1f))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = depthScale
+                        scaleY = depthScale
+                        alpha = depthAlpha
+                    }
+            ) {
+                if (page == 0) {
+                    if (rootItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                color = Win11MicaSurface,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .border(1.dp, Win11BorderSubtle, RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 24.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CreateNewFolder,
+                                        contentDescription = null,
+                                        tint = Win11AccentCyan,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "Área de trabalho vazia",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Win11TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Toque e segure no fundo ou adicione atalhos e pastas.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Win11TextSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        FluentChipButton(
+                                            label = "Nova Pasta",
+                                            onClick = onRequestCreateFolder,
+                                            testTag = "empty_create_folder_btn"
+                                        )
+                                        FluentChipButton(
+                                            label = "Adicionar App",
+                                            onClick = onRequestAddApp,
+                                            testTag = "empty_add_app_btn"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = gridDensity.cellSizeDp.dp),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag("desktop_grid")
+                        ) {
+                            items(rootItems, key = { it.id }) { item ->
+                                val isFolder = item.type == DesktopItemType.FOLDER.name
+                                val folderChildren = remember(allItems, item.id) {
+                                    if (isFolder) allItems.filter { it.folderId == item.id } else emptyList()
+                                }
+                                val app = item.packageName?.let { appsByPackage[it] }
+
+                                DesktopTile(
+                                    item = item,
+                                    app = app,
+                                    folderChildren = folderChildren,
+                                    appsByPackage = appsByPackage,
+                                    availableFolders = folders,
+                                    showLabel = showLabels,
+                                    onClick = {
+                                        if (isFolder) {
+                                            onOpenFolder(item.id)
+                                        } else if (item.packageName != null) {
+                                            onLaunchApp(item.packageName)
+                                        }
+                                    },
+                                    onRenameRequest = { onRenameRequest(item) },
+                                    onMoveToFolderRequest = { onMoveToFolderRequest(item) },
+                                    onRemoveFromDesktop = { onRemoveFromDesktop(item) },
+                                    onPinToTaskbar = { item.packageName?.let(onPinToTaskbar) },
+                                    onOpenAppInfo = { item.packageName?.let(onOpenAppInfo) },
+                                    onUninstallApp = { item.packageName?.let(onUninstallApp) }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    val pageApps = appPages.getOrNull(page - 1).orEmpty()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 18.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = if (appPages.size > 1) {
+                                "Biblioteca de Aplicativos • Página $page de ${appPages.size}"
+                            } else {
+                                "Biblioteca de Aplicativos (${installedApps.size})"
+                            },
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = Win11TextSecondary,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = gridDensity.cellSizeDp.dp),
+                            contentPadding = PaddingValues(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag("desktop_apps_page_$page")
+                        ) {
+                            items(pageApps, key = { it.packageName }) { app ->
+                                AppPageTile(
+                                    app = app,
+                                    showLabel = showLabels,
+                                    onLaunch = { onLaunchApp(app.packageName) },
+                                    onPinToTaskbar = { onPinToTaskbar(app.packageName) },
+                                    onOpenAppInfo = { onOpenAppInfo(app.packageName) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (totalPages > 1) {
             Surface(
-                color = Win11MicaSurface,
+                color = Win11MicaSurface.copy(alpha = 0.85f),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
                     .border(1.dp, Win11BorderSubtle, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 24.dp)
+                    .testTag("desktop_page_indicator")
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.CreateNewFolder,
-                        contentDescription = null,
-                        tint = Win11AccentCyan,
-                        modifier = Modifier.size(40.dp)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Área de trabalho vazia",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Win11TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Toque e segure no fundo ou adicione atalhos e pastas.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Win11TextSecondary,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FluentChipButton(
-                            label = "Nova Pasta",
-                            onClick = onRequestCreateFolder,
-                            testTag = "empty_create_folder_btn"
-                        )
-                        FluentChipButton(
-                            label = "Adicionar App",
-                            onClick = onRequestAddApp,
-                            testTag = "empty_add_app_btn"
+                    repeat(totalPages) { index ->
+                        val selected = pagerState.currentPage == index
+                        Box(
+                            modifier = Modifier
+                                .height(6.dp)
+                                .width(if (selected) 20.dp else 6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (selected) Win11AccentCyan
+                                    else Win11TextSecondary.copy(alpha = 0.45f)
+                                )
+                                .clickable {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(
+                                            page = index,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.85f,
+                                                stiffness = Spring.StiffnessMediumLow
+                                            )
+                                        )
+                                    }
+                                }
                         )
                     }
                 }
             }
         }
-        return
     }
+}
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = gridDensity.cellSizeDp.dp),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("desktop_grid")
-    ) {
-        items(rootItems, key = { it.id }) { item ->
-            val isFolder = item.type == DesktopItemType.FOLDER.name
-            val folderChildren = remember(allItems, item.id) {
-                if (isFolder) allItems.filter { it.folderId == item.id } else emptyList()
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AppPageTile(
+    app: InstalledApp,
+    showLabel: Boolean,
+    onLaunch: () -> Unit,
+    onPinToTaskbar: () -> Unit,
+    onOpenAppInfo: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.93f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "appPageTileScale"
+    )
+
+    Box(contentAlignment = Alignment.TopCenter) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clip(RoundedCornerShape(10.dp))
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.material3.ripple(),
+                    onClick = onLaunch,
+                    onLongClick = { menuExpanded = true }
+                )
+                .padding(horizontal = 6.dp, vertical = 8.dp)
+        ) {
+            AppIconTile(app = app, sizeDp = 48)
+            if (showLabel) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = app.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Win11TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(78.dp)
+                )
             }
-            val app = item.packageName?.let { appsByPackage[it] }
+        }
 
-            DesktopTile(
-                item = item,
-                app = app,
-                folderChildren = folderChildren,
-                appsByPackage = appsByPackage,
-                availableFolders = folders,
-                showLabel = showLabels,
-                onClick = {
-                    if (isFolder) {
-                        onOpenFolder(item.id)
-                    } else if (item.packageName != null) {
-                        onLaunchApp(item.packageName)
-                    }
-                },
-                onRenameRequest = { onRenameRequest(item) },
-                onMoveToFolderRequest = { onMoveToFolderRequest(item) },
-                onRemoveFromDesktop = { onRemoveFromDesktop(item) },
-                onPinToTaskbar = { item.packageName?.let(onPinToTaskbar) },
-                onOpenAppInfo = { item.packageName?.let(onOpenAppInfo) },
-                onUninstallApp = { item.packageName?.let(onUninstallApp) }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            containerColor = Win11CardSurface
+        ) {
+            DropdownMenuItem(
+                text = { Text("Abrir", color = Win11TextPrimary) },
+                onClick = { menuExpanded = false; onLaunch() }
+            )
+            DropdownMenuItem(
+                text = { Text("Fixar na Barra de Tarefas", color = Win11TextPrimary) },
+                onClick = { menuExpanded = false; onPinToTaskbar() }
+            )
+            DropdownMenuItem(
+                text = { Text("Informações do app", color = Win11TextPrimary) },
+                onClick = { menuExpanded = false; onOpenAppInfo() }
             )
         }
     }
@@ -193,13 +394,26 @@ private fun DesktopTile(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val isFolder = item.type == DesktopItemType.FOLDER.name
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.93f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "desktopTileScale"
+    )
 
     Box(contentAlignment = Alignment.TopCenter) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
                 .clip(RoundedCornerShape(10.dp))
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.material3.ripple(),
                     onClick = onClick,
                     onLongClick = { menuExpanded = true }
                 )

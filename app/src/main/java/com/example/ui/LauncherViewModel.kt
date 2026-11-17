@@ -71,7 +71,8 @@ data class LauncherUiState(
     val activeWindowId: String? = null,
     val taskbarPopoverWindowId: String? = null,
     val pendingOverlayPermissionLaunch: PendingAppLaunch? = null,
-    val showGestureGuideDialog: Boolean = false
+    val showGestureGuideDialog: Boolean = false,
+    val showFreeformGuideDialog: Boolean = false
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -96,6 +97,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val taskbarPopoverWindowIdFlow = MutableStateFlow<String?>(null)
     private val pendingOverlayPermissionLaunchFlow = MutableStateFlow<PendingAppLaunch?>(null)
     private val showGestureGuideDialogFlow = MutableStateFlow(false)
+    private val showFreeformGuideDialogFlow = MutableStateFlow(false)
     private var pendingPermissionReturnLaunch: PendingAppLaunch? = null
     private var lastExternalLaunchAtMs: Long = 0L
     private var hasPromptedDefaultLauncherThisSession = false
@@ -129,7 +131,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val banner: String?,
         val contextMenu: Boolean,
         val pendingLaunch: PendingAppLaunch?,
-        val showGestureGuide: Boolean
+        val showGestureGuide: Boolean,
+        val showFreeformGuide: Boolean
     )
 
     private val coreStreamsFlow = combine(
@@ -160,7 +163,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         statusBannerFlow,
         desktopContextMenuFlow,
         pendingOverlayPermissionLaunchFlow,
-        showGestureGuideDialogFlow
+        showGestureGuideDialogFlow,
+        showFreeformGuideDialogFlow
     ) { arr ->
         @Suppress("UNCHECKED_CAST")
         WindowStreams(
@@ -171,7 +175,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             banner = arr[4] as String?,
             contextMenu = arr[5] as Boolean,
             pendingLaunch = arr[6] as PendingAppLaunch?,
-            showGestureGuide = arr[7] as Boolean
+            showGestureGuide = arr[7] as Boolean,
+            showFreeformGuide = arr[8] as Boolean
         )
     }
 
@@ -211,7 +216,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             activeWindowId = win.activeWindowId,
             taskbarPopoverWindowId = win.popoverWindowId,
             pendingOverlayPermissionLaunch = win.pendingLaunch,
-            showGestureGuideDialog = win.showGestureGuide
+            showGestureGuideDialog = win.showGestureGuide,
+            showFreeformGuideDialog = win.showFreeformGuide
         )
     }.stateIn(
         scope = viewModelScope,
@@ -276,7 +282,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     wifiConnected = controls.telemetry.wifiConnected,
                     weatherTempLabel = weatherTemp,
                     keepTaskbarOverApps = controls.prefs.keepTaskbarOverApps,
-                    anchorTaskbarAtBottomEdge = controls.prefs.anchorTaskbarAtBottomEdge
+                    anchorTaskbarAtBottomEdge = controls.prefs.anchorTaskbarAtBottomEdge,
+                    useFreeformBounds = controls.prefs.useFreeformLaunchBounds
                 )
             }.collect { snapshot ->
                 ExternalWindowOverlayBus.updateTaskbarSnapshot(snapshot)
@@ -623,9 +630,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
         pendingOverlayPermissionLaunchFlow.value = null
 
+        val density = getApplication<Application>().resources.displayMetrics.density
         val reserveTaskbarPx = if (prefs.keepTaskbarOverApps && hasOverlayPermission) {
-            val density = getApplication<Application>().resources.displayMetrics.density
             (56f * density).roundToInt()
+        } else {
+            0
+        }
+        val reserveTopBarPx = if (hasOverlayPermission) {
+            (42f * density).roundToInt()
         } else {
             0
         }
@@ -637,7 +649,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     packageName = packageName,
                     appLabel = appLabel,
                     sizeMode = modeToUse,
-                    forceLandscape = prefs.forceLandscapeApps
+                    forceLandscape = prefs.forceLandscapeApps,
+                    useFreeformBounds = prefs.useFreeformLaunchBounds
                 )
             )
             AppWindowOverlayService.startOverlay(
@@ -646,6 +659,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 appLabel = appLabel,
                 sizeMode = modeToUse,
                 forceLandscape = prefs.forceLandscapeApps,
+                useFreeformBounds = prefs.useFreeformLaunchBounds,
                 keepTaskbarOverApps = prefs.keepTaskbarOverApps,
                 anchorTaskbarAtBottomEdge = prefs.anchorTaskbarAtBottomEdge
             )
@@ -657,7 +671,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             forceLandscape = prefs.forceLandscapeApps,
             useFreeformBounds = prefs.useFreeformLaunchBounds,
             windowSizeMode = modeToUse,
-            reserveBottomTaskbarPx = reserveTaskbarPx
+            reserveBottomTaskbarPx = reserveTaskbarPx,
+            reserveTopBarPx = reserveTopBarPx,
+            anchorTaskbarAtBottomEdge = prefs.anchorTaskbarAtBottomEdge
         )
         if (launched) {
             val winId = "app_$packageName"
@@ -878,6 +894,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun dismissGestureGuideDialog() {
         showGestureGuideDialogFlow.value = false
+    }
+
+    fun openFreeformGuideDialog() {
+        dismissOverlay()
+        showFreeformGuideDialogFlow.value = true
+    }
+
+    fun dismissFreeformGuideDialog() {
+        showFreeformGuideDialogFlow.value = false
     }
 
     // --- Copilot AI (Firebase AI Logic) ---

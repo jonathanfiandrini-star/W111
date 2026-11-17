@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.ScreenLockLandscape
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Wifi
@@ -65,6 +68,7 @@ import kotlin.math.roundToInt
 fun ActionCenterFlyout(
     telemetry: SystemTelemetry,
     forceLandscapeApps: Boolean,
+    useFreeformLaunchBounds: Boolean,
     onOpenWifi: () -> Unit,
     onOpenBluetooth: () -> Unit,
     onToggleTorch: () -> Unit,
@@ -77,6 +81,7 @@ fun ActionCenterFlyout(
     onVolumeChange: (Int) -> Unit,
     onOpenSystemSettings: () -> Unit,
     onOpenNavigationSettings: () -> Unit,
+    onOpenFreeformGuide: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -90,7 +95,12 @@ fun ActionCenterFlyout(
             .testTag("action_center_flyout")
     ) {
         Column {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
                 // Row 1 of Quick Tiles
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -272,6 +282,46 @@ fun ActionCenterFlyout(
                     }
                     Text(
                         text = "Abrir",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Win11AccentCyan
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Freeform window bounds guide shortcut
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (useFreeformLaunchBounds) Win11AccentCyan.copy(alpha = 0.14f) else Win11CardSurface)
+                        .border(
+                            1.dp,
+                            if (useFreeformLaunchBounds) Win11AccentCyan else Win11BorderSubtle,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable(onClick = onOpenFreeformGuide)
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                        .testTag("action_tile_freeform")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.PictureInPictureAlt,
+                            contentDescription = "Apps acima da Barra",
+                            tint = Win11AccentCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Apps acima da Barra (Janela Livre)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Win11TextPrimary
+                        )
+                    }
+                    Text(
+                        text = if (useFreeformLaunchBounds) "Ativo" else "Guia",
                         style = MaterialTheme.typography.labelSmall,
                         color = Win11AccentCyan
                     )

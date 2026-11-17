@@ -205,4 +205,32 @@ class ExampleRobolectricTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("gesture_nav_guide_dialog").assertDoesNotExist()
     }
+
+    @Test
+    fun `desktop pager and freeform window guide work smoothly`() {
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("desktop_pager").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("taskbar_system_tray").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("action_tile_freeform")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("freeform_guide_dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("freeform_guide_bounds_switch").assertIsDisplayed()
+        composeRule.onNodeWithTag("freeform_guide_dev_btn").assertIsDisplayed()
+        composeRule.onNodeWithTag("freeform_guide_close_btn").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("freeform_guide_dialog").assertDoesNotExist()
+
+        composeRule.onNodeWithTag("taskbar_start_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("start_launcher_settings_btn").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("settings_freeform_guide_btn")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
 }

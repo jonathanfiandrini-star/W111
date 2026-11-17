@@ -1,8 +1,12 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,11 +52,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.WindowSizeMode
+import kotlinx.coroutines.launch
 import com.example.ui.theme.Win11AccentCyan
 import com.example.ui.theme.Win11BorderHighlight
 import com.example.ui.theme.Win11BorderSubtle
@@ -115,8 +122,29 @@ fun BoxScope.DesktopWindowFrame(
             WindowSizeMode.SPLIT_LEFT, WindowSizeMode.SPLIT_RIGHT -> 6.dp
             WindowSizeMode.COMPACT -> 8.dp
         }
-        val cornerRadius = if (sizeMode == WindowSizeMode.MAXIMIZED) 0.dp else 14.dp
+        val cornerRadius by animateDpAsState(
+            targetValue = if (sizeMode == WindowSizeMode.MAXIMIZED) 0.dp else 14.dp,
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+            label = "windowCorner"
+        )
         val borderColor = if (isActive) Win11BorderHighlight else Win11BorderSubtle
+
+        val entranceScale = remember(windowId) { Animatable(0.93f) }
+        val entranceAlpha = remember(windowId) { Animatable(0f) }
+        LaunchedEffect(windowId) {
+            launch {
+                entranceScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(dampingRatio = 0.84f, stiffness = Spring.StiffnessMediumLow)
+                )
+            }
+            launch {
+                entranceAlpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing)
+                )
+            }
+        }
 
         Surface(
             color = Win11MicaSurface,
@@ -125,6 +153,11 @@ fun BoxScope.DesktopWindowFrame(
             shadowElevation = if (isActive) 24.dp else 10.dp,
             modifier = Modifier
                 .align(alignment)
+                .graphicsLayer {
+                    scaleX = entranceScale.value
+                    scaleY = entranceScale.value
+                    alpha = entranceAlpha.value
+                }
                 .padding(horizontal = outerPadding, vertical = outerPadding)
                 .width(animatedWidth)
                 .height(animatedHeight)
@@ -288,6 +321,11 @@ fun CaptionControlButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "captionBtnScale"
+    )
     val bgColor = when {
         isClose && pressed -> Color(0xFFE81123)
         isClose -> Color(0x22E81123)
@@ -298,6 +336,10 @@ fun CaptionControlButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .size(width = 44.dp, height = 40.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(bgColor)

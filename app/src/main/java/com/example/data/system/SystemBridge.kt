@@ -28,9 +28,11 @@ import android.provider.Settings
 import android.util.LruCache
 import android.view.Display
 import android.view.Surface
+import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.example.R
 import com.example.data.model.InstalledApp
 import com.example.data.model.SystemTelemetry
 import com.example.data.model.WindowSizeMode
@@ -221,9 +223,11 @@ class SystemBridge(private val context: Context) {
     fun launchApp(
         packageName: String,
         forceLandscape: Boolean = true,
-        useFreeformBounds: Boolean = false,
+        useFreeformBounds: Boolean = true,
         windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
-        reserveBottomTaskbarPx: Int = 0
+        reserveBottomTaskbarPx: Int = 0,
+        reserveTopBarPx: Int = 0,
+        anchorTaskbarAtBottomEdge: Boolean = false
     ): Boolean {
         return try {
             val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
@@ -237,43 +241,85 @@ class SystemBridge(private val context: Context) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
             }
 
+            val options = runCatching {
+                ActivityOptions.makeCustomAnimation(
+                    context,
+                    R.anim.win11_app_enter,
+                    R.anim.win11_app_exit
+                )
+            }.getOrElse { ActivityOptions.makeBasic() }
+
             val shouldApplyBounds = useFreeformBounds || windowSizeMode != WindowSizeMode.MAXIMIZED
             if (shouldApplyBounds) {
-                val metrics = context.resources.displayMetrics
-                val longSide = maxOf(metrics.widthPixels, metrics.heightPixels)
-                val shortSide = minOf(metrics.widthPixels, metrics.heightPixels)
-                val usableHeight = (shortSide - reserveBottomTaskbarPx).coerceAtLeast(300)
+                val (screenW, screenH, topInsetPx, navBottomPx) = readScreenFrameMetrics()
+                val topBound = maxOf(reserveTopBarPx, topInsetPx)
+                val navAllowance = if (anchorTaskbarAtBottomEdge) 0 else navBottomPx
+                val bottomReserved = reserveBottomTaskbarPx + navAllowance
+                val usableBottom = (screenH - bottomReserved).coerceAtLeast(topBound + 280)
+                val usableHeight = (usableBottom - topBound).coerceAtLeast(280)
+
                 val rect = when (windowSizeMode) {
                     WindowSizeMode.COMPACT -> {
-                        val w = (longSide * 0.64f).toInt().coerceAtLeast(520)
-                        val h = (usableHeight * 0.78f).toInt().coerceAtLeast(300)
-                        val l = ((longSide - w) / 2).coerceAtLeast(0)
-                        val t = ((usableHeight - h) / 2).coerceAtLeast(0)
+                        val w = (screenW * 0.68f).toInt().coerceAtLeast(520)
+                        val h = (usableHeight * 0.80f).toInt().coerceAtLeast(300)
+                        val l = ((screenW - w) / 2).coerceAtLeast(0)
+                        val t = (topBound + (usableHeight - h) / 2).coerceAtLeast(topBound)
                         Rect(l, t, l + w, t + h)
                     }
                     WindowSizeMode.SPLIT_LEFT -> {
-                        val halfW = (longSide / 2).coerceAtLeast(360)
-                        Rect(0, 0, halfW, usableHeight)
+                        val halfW = (screenW / 2).coerceAtLeast(360)
+                        Rect(0, topBound, halfW, usableBottom)
                     }
                     WindowSizeMode.SPLIT_RIGHT -> {
-                        val halfW = (longSide / 2).coerceAtLeast(360)
-                        Rect(halfW, 0, longSide, usableHeight)
+                        val halfW = (screenW / 2).coerceAtLeast(360)
+                        Rect(halfW, topBound, screenW, usableBottom)
                     }
                     WindowSizeMode.MAXIMIZED -> {
-                        Rect(0, 0, longSide, usableHeight)
+                        Rect(0, topBound, screenW, usableBottom)
                     }
                 }
-                val options = ActivityOptions.makeBasic().apply {
-                    setLaunchBounds(rect)
-                }
-                context.startActivity(intent, options.toBundle())
-            } else {
-                context.startActivity(intent)
+                options.setLaunchBounds(rect)
             }
+            context.startActivity(intent, options.toBundle())
             true
         } catch (_: Exception) {
             false
         }
+    }
+
+    private data class ScreenFrameMetrics(
+        val widthPx: Int,
+        val heightPx: Int,
+        val topInsetPx: Int,
+        val navBottomPx: Int
+    )
+
+    private fun readScreenFrameMetrics(): ScreenFrameMetrics {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && wm != null) {
+            val metrics = wm.currentWindowMetrics
+            val bounds = metrics.bounds
+            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
+                WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
+            )
+            val rawW = bounds.width().coerceAtLeast(1)
+            val rawH = bounds.height().coerceAtLeast(1)
+            return ScreenFrameMetrics(
+                widthPx = maxOf(rawW, rawH),
+                heightPx = minOf(rawW, rawH),
+                topInsetPx = insets.top,
+                navBottomPx = insets.bottom
+            )
+        }
+        val dm = context.resources.displayMetrics
+        val longSide = maxOf(dm.widthPixels, dm.heightPixels)
+        val shortSide = minOf(dm.widthPixels, dm.heightPixels)
+        return ScreenFrameMetrics(
+            widthPx = longSide,
+            heightPx = shortSide,
+            topInsetPx = 0,
+            navBottomPx = 0
+        )
     }
 
     fun openAppInfo(packageName: String) {

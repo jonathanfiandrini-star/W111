@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.StickyNote2
@@ -498,6 +499,118 @@ fun GestureNavigationGuideDialog(
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("gesture_guide_close_btn")
+            ) {
+                Text("Fechar", color = Win11TextSecondary)
+            }
+        }
+    )
+}
+
+@Composable
+fun FreeformModeGuideDialog(
+    useFreeformLaunchBounds: Boolean,
+    onToggleFreeformBounds: (Boolean) -> Unit,
+    onOpenDeveloperSettings: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Win11MicaSurface,
+        modifier = Modifier.testTag("freeform_guide_dialog"),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.PictureInPictureAlt,
+                    contentDescription = null,
+                    tint = Win11AccentCyan,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Apps acima da Barra (Janela Livre)",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Win11TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "O Fluent 11 já envia o tamanho exato entre a barra superior e a Barra de Tarefas inferior ao abrir aplicativos. Para o Android respeitar esse limite em qualquer app, ative o modo Janela Livre no sistema.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Win11TextSecondary
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "Como ativar no tablet / HyperOS:",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Win11AccentCyan
+                    )
+                    Text(
+                        text = "1. Toque em \"Opções do Desenvolvedor\" abaixo.\n2. Ative \"Ativar janelas de forma livre\" e \"Forçar redimensionamento de atividades\".\n3. Volte ao Fluent 11 e abra o app — ele ficará delimitado acima da Barra de Tarefas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Win11TextPrimary
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Ajustar limites ao abrir apps",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Win11TextPrimary
+                        )
+                        Text(
+                            text = "Envia área útil da Barra de Tarefas para cima automaticamente",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Win11TextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = useFreeformLaunchBounds,
+                        onCheckedChange = onToggleFreeformBounds,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Win11NavyBg,
+                            checkedTrackColor = Win11AccentCyan
+                        ),
+                        modifier = Modifier.testTag("freeform_guide_bounds_switch")
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onOpenDeveloperSettings,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Win11AccentCyan,
+                    contentColor = Win11NavyBg
+                ),
+                modifier = Modifier.testTag("freeform_guide_dev_btn")
+            ) {
+                Text("Opções do Desenvolvedor")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("freeform_guide_close_btn")
             ) {
                 Text("Fechar", color = Win11TextSecondary)
             }

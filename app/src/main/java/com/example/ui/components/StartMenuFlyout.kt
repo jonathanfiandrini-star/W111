@@ -1,5 +1,13 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -131,174 +139,193 @@ fun StartMenuFlyout(
                 }
             }
 
-            if (!showAllApps) {
-                // Header row: Fixados + Todos os Apps button
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Fixados",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Win11TextPrimary
-                    )
-                    Surface(
-                        onClick = { showAllApps = true },
-                        color = Win11CardSurface,
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .border(1.dp, Win11BorderSubtle, RoundedCornerShape(6.dp))
-                            .testTag("start_all_apps_button")
-                    ) {
+            AnimatedContent(
+                targetState = showAllApps,
+                transitionSpec = {
+                    val forward = targetState
+                    (slideInHorizontally(
+                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                        initialOffsetX = { if (forward) it / 4 else -it / 4 }
+                    ) + fadeIn(tween(200))) togetherWith
+                        (slideOutHorizontally(
+                            animationSpec = tween(180, easing = FastOutSlowInEasing),
+                            targetOffsetX = { if (forward) -it / 4 else it / 4 }
+                        ) + fadeOut(tween(160)))
+                },
+                modifier = Modifier.weight(1f),
+                label = "startMenuPageTransition"
+            ) { allAppsVisible ->
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (!allAppsVisible) {
+                        // Header row: Fixados + Todos os Apps button
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 22.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Todos os apps",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "Fixados",
+                                style = MaterialTheme.typography.titleMedium,
                                 color = Win11TextPrimary
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = Win11TextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Pinned Grid
-                val displayPinned = if (pinnedApps.isNotEmpty()) pinnedApps else installedApps.take(10)
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 84.dp),
-                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    items(displayPinned, key = { it.packageName }) { app ->
-                        StartAppGridItem(
-                            app = app,
-                            isPinnedStart = startPinnedSet.contains(app.packageName),
-                            isPinnedTaskbar = taskbarPinnedPackages.contains(app.packageName),
-                            onLaunch = { onLaunchApp(app.packageName) },
-                            onPinToDesktop = { onPinToDesktop(app) },
-                            onTogglePin = { target -> onTogglePin(app.packageName, target) },
-                            onOpenAppInfo = { onOpenAppInfo(app.packageName) },
-                            onUninstallApp = { onUninstallApp(app.packageName) }
-                        )
-                    }
-                }
-
-                // Recommended / Recent Section
-                if (recentApps.isNotEmpty()) {
-                    HorizontalDivider(color = Win11BorderSubtle)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 22.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = "Recomendados",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = Win11TextPrimary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            items(recentApps.take(6), key = { it.packageName }) { app ->
+                            Surface(
+                                onClick = { showAllApps = true },
+                                color = Win11CardSurface,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier
+                                    .border(1.dp, Win11BorderSubtle, RoundedCornerShape(6.dp))
+                                    .testTag("start_all_apps_button")
+                            ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Win11CardSurface.copy(alpha = 0.7f))
-                                        .clickable { onLaunchApp(app.packageName) }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    AppIconTile(app = app, sizeDp = 26)
-                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = app.label,
+                                        text = "Todos os apps",
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = Win11TextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.widthIn(max = 100.dp)
+                                        color = Win11TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = Win11TextSecondary,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
                         }
-                    }
-                }
-            } else {
-                // All Apps A-Z view
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Todos os aplicativos (${installedApps.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Win11TextPrimary
-                    )
-                    Surface(
-                        onClick = { showAllApps = false },
-                        color = Win11CardSurface,
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier
-                            .border(1.dp, Win11BorderSubtle, RoundedCornerShape(6.dp))
-                            .testTag("start_back_to_pinned_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Pinned Grid
+                        val displayPinned = if (pinnedApps.isNotEmpty()) pinnedApps else installedApps.take(10)
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 84.dp),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = null,
-                                tint = Win11TextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            items(displayPinned, key = { it.packageName }) { app ->
+                                StartAppGridItem(
+                                    app = app,
+                                    isPinnedStart = startPinnedSet.contains(app.packageName),
+                                    isPinnedTaskbar = taskbarPinnedPackages.contains(app.packageName),
+                                    onLaunch = { onLaunchApp(app.packageName) },
+                                    onPinToDesktop = { onPinToDesktop(app) },
+                                    onTogglePin = { target -> onTogglePin(app.packageName, target) },
+                                    onOpenAppInfo = { onOpenAppInfo(app.packageName) },
+                                    onUninstallApp = { onUninstallApp(app.packageName) }
+                                )
+                            }
+                        }
+
+                        // Recommended / Recent Section
+                        if (recentApps.isNotEmpty()) {
+                            HorizontalDivider(color = Win11BorderSubtle)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 22.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = "Recomendados",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Win11TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    items(recentApps.take(6), key = { it.packageName }) { app ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Win11CardSurface.copy(alpha = 0.7f))
+                                                .clickable { onLaunchApp(app.packageName) }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            AppIconTile(app = app, sizeDp = 26)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = app.label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = Win11TextPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.widthIn(max = 100.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // All Apps A-Z view
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 22.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Voltar",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "Todos os aplicativos (${installedApps.size})",
+                                style = MaterialTheme.typography.titleMedium,
                                 color = Win11TextPrimary
                             )
+                            Surface(
+                                onClick = { showAllApps = false },
+                                color = Win11CardSurface,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier
+                                    .border(1.dp, Win11BorderSubtle, RoundedCornerShape(6.dp))
+                                    .testTag("start_back_to_pinned_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                        contentDescription = null,
+                                        tint = Win11TextSecondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Voltar",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Win11TextPrimary
+                                    )
+                                }
+                            }
                         }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("all_apps_list")
-                ) {
-                    items(installedApps, key = { it.packageName }) { app ->
-                        AllAppsRowItem(
-                            app = app,
-                            isPinnedStart = startPinnedSet.contains(app.packageName),
-                            isPinnedTaskbar = taskbarPinnedPackages.contains(app.packageName),
-                            onLaunch = { onLaunchApp(app.packageName) },
-                            onPinToDesktop = { onPinToDesktop(app) },
-                            onTogglePin = { target -> onTogglePin(app.packageName, target) },
-                            onOpenAppInfo = { onOpenAppInfo(app.packageName) },
-                            onUninstallApp = { onUninstallApp(app.packageName) }
-                        )
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("all_apps_list")
+                        ) {
+                            items(installedApps, key = { it.packageName }) { app ->
+                                AllAppsRowItem(
+                                    app = app,
+                                    isPinnedStart = startPinnedSet.contains(app.packageName),
+                                    isPinnedTaskbar = taskbarPinnedPackages.contains(app.packageName),
+                                    onLaunch = { onLaunchApp(app.packageName) },
+                                    onPinToDesktop = { onPinToDesktop(app) },
+                                    onTogglePin = { target -> onTogglePin(app.packageName, target) },
+                                    onOpenAppInfo = { onOpenAppInfo(app.packageName) },
+                                    onUninstallApp = { onUninstallApp(app.packageName) }
+                                )
+                            }
+                        }
                     }
                 }
             }

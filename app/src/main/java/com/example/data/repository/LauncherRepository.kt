@@ -232,15 +232,19 @@ class LauncherRepository(
     fun launchApp(
         packageName: String,
         forceLandscape: Boolean = true,
-        useFreeformBounds: Boolean = false,
+        useFreeformBounds: Boolean = true,
         windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
-        reserveBottomTaskbarPx: Int = 0
+        reserveBottomTaskbarPx: Int = 0,
+        reserveTopBarPx: Int = 0,
+        anchorTaskbarAtBottomEdge: Boolean = false
     ): Boolean = systemBridge.launchApp(
         packageName = packageName,
         forceLandscape = forceLandscape,
         useFreeformBounds = useFreeformBounds,
         windowSizeMode = windowSizeMode,
-        reserveBottomTaskbarPx = reserveBottomTaskbarPx
+        reserveBottomTaskbarPx = reserveBottomTaskbarPx,
+        reserveTopBarPx = reserveTopBarPx,
+        anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge
     )
 
     fun canWriteSystemSettings(): Boolean = systemBridge.canWriteSystemSettings()

@@ -15,10 +15,14 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.example.data.ai.configureAppCheck
 import com.example.data.model.StickyNoteColor
 import com.example.service.AppWindowOverlayService
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -71,6 +75,7 @@ import com.example.ui.components.CopilotFlyout
 import com.example.ui.components.DesktopContextMenuDialog
 import com.example.ui.components.DesktopGridArea
 import com.example.ui.components.FloatingFolderWindow
+import com.example.ui.components.FreeformModeGuideDialog
 import com.example.ui.components.GestureNavigationGuideDialog
 import com.example.ui.components.LauncherSettingsWindow
 import com.example.ui.components.MoveToFolderDialog
@@ -180,6 +185,12 @@ class MainActivity : ComponentActivity() {
                     viewModel.focusWindow(winId)
                 }
             }
+            AppWindowOverlayService.ACTION_OPEN_FREEFORM_GUIDE -> {
+                if (pkg.isNotBlank()) {
+                    viewModel.handleExternalWindowMinimize(pkg)
+                }
+                viewModel.openFreeformGuideDialog()
+            }
         }
     }
 
@@ -228,6 +239,7 @@ fun Fluent11LauncherScreen(
         uiState.taskbarPopoverWindowId != null ||
         uiState.pendingOverlayPermissionLaunch != null ||
         uiState.showGestureGuideDialog ||
+        uiState.showFreeformGuideDialog ||
         visibleInternalWindows.isNotEmpty() ||
         showCreateFolderDialog ||
         renameTargetItem != null ||
@@ -236,6 +248,7 @@ fun Fluent11LauncherScreen(
     // On a HOME launcher, back button closes active dialogs/flyouts/windows cleanly instead of exiting
     BackHandler(enabled = hasAnyOverlay) {
         when {
+            uiState.showFreeformGuideDialog -> viewModel.dismissFreeformGuideDialog()
             uiState.showGestureGuideDialog -> viewModel.dismissGestureGuideDialog()
             uiState.pendingOverlayPermissionLaunch != null -> viewModel.dismissOverlayPermissionPrompt()
             showCreateFolderDialog -> showCreateFolderDialog = false
@@ -277,6 +290,7 @@ fun Fluent11LauncherScreen(
                     rootItems = uiState.desktopRootItems,
                     allItems = uiState.allDesktopItems,
                     appsByPackage = uiState.installedAppsByPackage,
+                    installedApps = uiState.installedApps,
                     gridDensity = uiState.preferences.gridDensity,
                     showLabels = uiState.preferences.showDesktopLabels,
                     onLaunchApp = { viewModel.launchApp(it) },
@@ -397,7 +411,8 @@ fun Fluent11LauncherScreen(
                                     onRequestOverlayPermission = { viewModel.openOverlayPermissionSettings() },
                                     onOpenDeveloperSettings = { viewModel.openDeveloperSettings() },
                                     onOpenDefaultHomeSettings = onRequestDefaultLauncher,
-                                    onOpenNavigationSettings = { viewModel.openGestureGuideDialog() }
+                                    onOpenNavigationSettings = { viewModel.openGestureGuideDialog() },
+                                    onOpenFreeformGuide = { viewModel.openFreeformGuideDialog() }
                                 )
                             }
                             DesktopWindowKind.INTERNAL_NOTES -> {
@@ -425,10 +440,13 @@ fun Fluent11LauncherScreen(
                 androidx.compose.animation.AnimatedVisibility(
                     visible = uiState.activeOverlay is ActiveOverlay.Widgets,
                     enter = slideInHorizontally(
-                        initialOffsetX = { -it / 2 },
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(),
-                    exit = slideOutHorizontally(targetOffsetX = { -it / 2 }) + fadeOut(),
+                        initialOffsetX = { -it / 3 },
+                        animationSpec = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow)
+                    ) + scaleIn(initialScale = 0.96f, animationSpec = tween(210, easing = FastOutSlowInEasing)) + fadeIn(tween(180)),
+                    exit = slideOutHorizontally(
+                        targetOffsetX = { -it / 3 },
+                        animationSpec = tween(170, easing = FastOutSlowInEasing)
+                    ) + fadeOut(tween(150)),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 12.dp, bottom = 10.dp, top = 8.dp)
@@ -452,10 +470,13 @@ fun Fluent11LauncherScreen(
                 androidx.compose.animation.AnimatedVisibility(
                     visible = uiState.activeOverlay is ActiveOverlay.StartMenu,
                     enter = slideInVertically(
-                        initialOffsetY = { it / 3 },
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it / 3 }) + fadeOut(),
+                        initialOffsetY = { it / 5 },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                    ) + scaleIn(initialScale = 0.94f, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(190)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it / 5 },
+                        animationSpec = tween(170, easing = FastOutSlowInEasing)
+                    ) + scaleOut(targetScale = 0.95f, animationSpec = tween(170)) + fadeOut(tween(150)),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 10.dp, top = 8.dp)
@@ -481,10 +502,13 @@ fun Fluent11LauncherScreen(
                 androidx.compose.animation.AnimatedVisibility(
                     visible = uiState.activeOverlay is ActiveOverlay.Search,
                     enter = slideInVertically(
-                        initialOffsetY = { it / 3 },
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it / 3 }) + fadeOut(),
+                        initialOffsetY = { it / 5 },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                    ) + scaleIn(initialScale = 0.94f, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(190)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it / 5 },
+                        animationSpec = tween(170, easing = FastOutSlowInEasing)
+                    ) + scaleOut(targetScale = 0.95f, animationSpec = tween(170)) + fadeOut(tween(150)),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 10.dp, top = 8.dp)
@@ -507,10 +531,13 @@ fun Fluent11LauncherScreen(
                 androidx.compose.animation.AnimatedVisibility(
                     visible = uiState.activeOverlay is ActiveOverlay.Copilot,
                     enter = slideInHorizontally(
-                        initialOffsetX = { it / 2 },
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(),
-                    exit = slideOutHorizontally(targetOffsetX = { it / 2 }) + fadeOut(),
+                        initialOffsetX = { it / 3 },
+                        animationSpec = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow)
+                    ) + scaleIn(initialScale = 0.96f, animationSpec = tween(210, easing = FastOutSlowInEasing)) + fadeIn(tween(180)),
+                    exit = slideOutHorizontally(
+                        targetOffsetX = { it / 3 },
+                        animationSpec = tween(170, easing = FastOutSlowInEasing)
+                    ) + fadeOut(tween(150)),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 12.dp, bottom = 10.dp, top = 8.dp)
@@ -533,10 +560,13 @@ fun Fluent11LauncherScreen(
                 androidx.compose.animation.AnimatedVisibility(
                     visible = uiState.activeOverlay is ActiveOverlay.ActionCenter,
                     enter = slideInVertically(
-                        initialOffsetY = { it / 3 },
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(),
-                    exit = slideOutVertically(targetOffsetY = { it / 3 }) + fadeOut(),
+                        initialOffsetY = { it / 5 },
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                    ) + scaleIn(initialScale = 0.94f, animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeIn(tween(190)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it / 5 },
+                        animationSpec = tween(170, easing = FastOutSlowInEasing)
+                    ) + scaleOut(targetScale = 0.95f, animationSpec = tween(170)) + fadeOut(tween(150)),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 12.dp, bottom = 10.dp)
@@ -544,6 +574,7 @@ fun Fluent11LauncherScreen(
                     ActionCenterFlyout(
                         telemetry = uiState.telemetry,
                         forceLandscapeApps = uiState.preferences.forceLandscapeApps,
+                        useFreeformLaunchBounds = uiState.preferences.useFreeformLaunchBounds,
                         onOpenWifi = { viewModel.openWifiPanel() },
                         onOpenBluetooth = { viewModel.openBluetoothSettings() },
                         onToggleTorch = { viewModel.toggleTorch() },
@@ -555,7 +586,8 @@ fun Fluent11LauncherScreen(
                         onBrightnessChange = { viewModel.setWindowBrightness(it) },
                         onVolumeChange = { viewModel.setMediaVolume(it) },
                         onOpenSystemSettings = { viewModel.openSystemSettings() },
-                        onOpenNavigationSettings = { viewModel.openGestureGuideDialog() }
+                        onOpenNavigationSettings = { viewModel.openGestureGuideDialog() },
+                        onOpenFreeformGuide = { viewModel.openFreeformGuideDialog() }
                     )
                 }
 
@@ -731,6 +763,15 @@ fun Fluent11LauncherScreen(
             onToggleAnchorBottomEdge = { viewModel.setAnchorTaskbarAtBottomEdge(it) },
             onOpenSystemSettings = { viewModel.openSystemNavigationSettings() },
             onDismiss = { viewModel.dismissGestureGuideDialog() }
+        )
+    }
+
+    if (uiState.showFreeformGuideDialog) {
+        FreeformModeGuideDialog(
+            useFreeformLaunchBounds = uiState.preferences.useFreeformLaunchBounds,
+            onToggleFreeformBounds = { viewModel.setUseFreeformLaunchBounds(it) },
+            onOpenDeveloperSettings = { viewModel.openDeveloperSettings() },
+            onDismiss = { viewModel.dismissFreeformGuideDialog() }
         )
     }
 }

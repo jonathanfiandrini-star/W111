@@ -40,7 +40,7 @@ class LauncherPreferencesRepository(private val context: Context) {
             userDisplayName = prefs[Keys.USER_DISPLAY_NAME] ?: "Usuário",
             hasSeededDefaults = prefs[Keys.HAS_SEEDED_DEFAULTS] ?: false,
             forceLandscapeApps = prefs[Keys.FORCE_LANDSCAPE_APPS] ?: true,
-            useFreeformLaunchBounds = prefs[Keys.USE_FREEFORM_BOUNDS] ?: false,
+            useFreeformLaunchBounds = prefs[Keys.USE_FREEFORM_BOUNDS] ?: true,
             defaultWindowMode = WindowSizeMode.fromKey(
                 prefs[Keys.DEFAULT_WINDOW_MODE] ?: WindowSizeMode.MAXIMIZED.key
             ),

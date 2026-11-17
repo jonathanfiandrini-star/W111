@@ -1,6 +1,7 @@
 package com.example.service
 
 import android.annotation.SuppressLint
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -28,6 +29,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -66,10 +68,11 @@ class AppWindowOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
 
-    // Top-right floating caption bar
+    // Top Windows 11 Mica Title Bar
     private var captionRootView: View? = null
     private var captionLayoutParams: WindowManager.LayoutParams? = null
     private var snapStripView: LinearLayout? = null
+    private var titleIconView: ImageView? = null
     private var titleLabelView: TextView? = null
     private var modeChipView: TextView? = null
     private var snapButtons: Map<WindowSizeMode, TextView> = emptyMap()
@@ -87,6 +90,7 @@ class AppWindowOverlayService : Service() {
     private var currentAppLabel: String = ""
     private var currentSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED
     private var forceLandscape: Boolean = true
+    private var useFreeformBounds: Boolean = true
     private var keepTaskbarOverApps: Boolean = true
     private var anchorTaskbarAtBottomEdge: Boolean = false
     private var snapMenuExpanded: Boolean = false
@@ -123,6 +127,10 @@ class AppWindowOverlayService : Service() {
             ?: session?.sizeMode
             ?: WindowSizeMode.MAXIMIZED
         forceLandscape = intent?.getBooleanExtra(EXTRA_FORCE_LANDSCAPE, session?.forceLandscape ?: true) ?: true
+        useFreeformBounds = intent?.getBooleanExtra(
+            EXTRA_USE_FREEFORM_BOUNDS,
+            session?.useFreeformBounds ?: ExternalWindowOverlayBus.taskbarSnapshot.value.useFreeformBounds
+        ) ?: true
         keepTaskbarOverApps = intent?.getBooleanExtra(
             EXTRA_KEEP_TASKBAR,
             ExternalWindowOverlayBus.taskbarSnapshot.value.keepTaskbarOverApps
@@ -157,6 +165,7 @@ class AppWindowOverlayService : Service() {
             ExternalWindowOverlayBus.taskbarSnapshot.collect { snapshot ->
                 keepTaskbarOverApps = snapshot.keepTaskbarOverApps
                 anchorTaskbarAtBottomEdge = snapshot.anchorTaskbarAtBottomEdge
+                useFreeformBounds = snapshot.useFreeformBounds
                 if (keepTaskbarOverApps && currentPackageName.isNotBlank()) {
                     ensureTaskbarOverlayAttached()
                     updateTaskbarLayoutParamsIfNeeded()
@@ -232,19 +241,38 @@ class AppWindowOverlayService : Service() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
+            alpha = 0f
+            translationY = -dp(10).toFloat()
+        }
+
+        // Sleek full-width Windows 11 Mica Title Bar
+        val barWrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(COLOR_TITLE_BAR_BG)
+            elevation = dp(10).toFloat()
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(4), dp(6), dp(4))
-            background = GradientDrawable().apply {
-                setColor(COLOR_MICA_BG)
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), COLOR_BORDER_HIGHLIGHT)
-            }
-            elevation = dp(10).toFloat()
+            setPadding(dp(12), dp(2), dp(6), dp(2))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(38)
+            )
         }
+
+        val appIconView = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(20), dp(20)).apply {
+                marginEnd = dp(8)
+            }
+        }
+        titleIconView = appIconView
 
         val titleView = TextView(this).apply {
             setTextColor(COLOR_TEXT_PRIMARY)
@@ -252,8 +280,7 @@ class AppWindowOverlayService : Service() {
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            maxWidth = dp(128)
-            setPadding(dp(2), 0, dp(6), 0)
+            setPadding(0, 0, dp(8), 0)
         }
         titleLabelView = titleView
 
@@ -261,7 +288,7 @@ class AppWindowOverlayService : Service() {
             setTextColor(COLOR_ACCENT_CYAN)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(6), dp(2), dp(6), dp(2))
+            setPadding(dp(8), dp(3), dp(8), dp(3))
             background = GradientDrawable().apply {
                 setColor(COLOR_CARD_SURFACE)
                 cornerRadius = dp(6).toFloat()
@@ -272,6 +299,32 @@ class AppWindowOverlayService : Service() {
             }
         }
         modeChipView = chipView
+
+        val leftCluster = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            addView(appIconView)
+            addView(titleView)
+            addView(chipView)
+        }
+
+        val freeformGuidePill = TextView(this).apply {
+            text = "Ajustar"
+            contentDescription = "Guia de janela acima da Barra"
+            setTextColor(COLOR_ACCENT_CYAN)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            minHeight = dp(28)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2060CDFF"))
+                cornerRadius = dp(7).toFloat()
+                setStroke(dp(1), COLOR_BORDER_HIGHLIGHT)
+            }
+            setOnClickListener { openFreeformGuide() }
+        }
 
         val minimizeBtn = createCaptionButton(
             symbol = "—",
@@ -306,14 +359,24 @@ class AppWindowOverlayService : Service() {
             onCloseClicked()
         }
 
-        bar.addView(titleView)
-        bar.addView(chipView)
-        bar.addView(spacer(dp(6)))
+        bar.addView(leftCluster)
+        bar.addView(freeformGuidePill)
+        bar.addView(spacer(dp(8)))
         bar.addView(minimizeBtn)
         bar.addView(spacer(dp(2)))
         bar.addView(resizeBtn)
         bar.addView(spacer(dp(2)))
         bar.addView(closeBtn)
+
+        val topDivider = View(this).apply {
+            setBackgroundColor(COLOR_BORDER_SUBTLE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1)
+            )
+        }
+        barWrapper.addView(bar)
+        barWrapper.addView(topDivider)
 
         val strip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -323,15 +386,16 @@ class AppWindowOverlayService : Service() {
             background = GradientDrawable().apply {
                 setColor(COLOR_MICA_BG)
                 cornerRadius = dp(10).toFloat()
-                setStroke(dp(1), COLOR_BORDER_SUBTLE)
+                setStroke(dp(1), COLOR_BORDER_HIGHLIGHT)
             }
-            elevation = dp(8).toFloat()
+            elevation = dp(10).toFloat()
         }
         val stripLP = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
             topMargin = dp(4)
+            marginEnd = dp(12)
         }
 
         val buttonsMap = mutableMapOf<WindowSizeMode, TextView>()
@@ -356,12 +420,12 @@ class AppWindowOverlayService : Service() {
         snapButtons = buttonsMap
         snapStripView = strip
 
-        container.addView(bar)
+        container.addView(barWrapper)
         container.addView(strip, stripLP)
 
         val overlayType = overlayWindowType()
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -369,58 +433,30 @@ class AppWindowOverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = dp(14)
-            y = dp(32)
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
 
-        var startX = 0
-        var startY = 0
-        var touchX = 0f
-        var touchY = 0f
-        var dragging = false
-        titleView.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    startX = params.x
-                    startY = params.y
-                    touchX = event.rawX
-                    touchY = event.rawY
-                    dragging = false
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = (touchX - event.rawX).roundToInt()
-                    val dy = (event.rawY - touchY).roundToInt()
-                    if (abs(dx) > dp(4) || abs(dy) > dp(4)) {
-                        dragging = true
-                    }
-                    if (dragging) {
-                        params.x = (startX + dx).coerceAtLeast(dp(4))
-                        params.y = (startY + dy).coerceAtLeast(dp(8))
-                        runCatching { wm.updateViewLayout(container, params) }
-                    }
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (!dragging) {
-                        snapMenuExpanded = !snapMenuExpanded
-                        strip.visibility = if (snapMenuExpanded) View.VISIBLE else View.GONE
-                    }
-                    true
-                }
-                else -> false
-            }
+        leftCluster.setOnClickListener {
+            snapMenuExpanded = !snapMenuExpanded
+            strip.visibility = if (snapMenuExpanded) View.VISIBLE else View.GONE
         }
 
         captionLayoutParams = params
         captionRootView = container
         try {
             wm.addView(container, params)
+            container.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(220L)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         } catch (e: Exception) {
             Log.e("AppWindowOverlay", "Failed to attach caption overlay", e)
             captionRootView = null
@@ -435,6 +471,8 @@ class AppWindowOverlayService : Service() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(COLOR_TASKBAR_BG)
             elevation = dp(16).toFloat()
+            alpha = 0f
+            translationY = dp(16).toFloat()
         }
 
         // Top 1dp hairline border
@@ -566,6 +604,12 @@ class AppWindowOverlayService : Service() {
         taskbarRootView = wrapper
         try {
             wm.addView(wrapper, params)
+            wrapper.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(220L)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         } catch (e: Exception) {
             Log.e("AppWindowOverlay", "Failed to attach taskbar overlay", e)
             taskbarRootView = null
@@ -741,7 +785,8 @@ class AppWindowOverlayService : Service() {
                         packageName = pkg,
                         appLabel = entry.label,
                         sizeMode = entry.sizeMode,
-                        forceLandscape = forceLandscape
+                        forceLandscape = forceLandscape,
+                        useFreeformBounds = useFreeformBounds
                     )
                 )
                 ExternalWindowOverlayBus.emitAction(
@@ -750,9 +795,11 @@ class AppWindowOverlayService : Service() {
                 SystemBridge(this).launchApp(
                     packageName = pkg,
                     forceLandscape = forceLandscape,
-                    useFreeformBounds = false,
+                    useFreeformBounds = useFreeformBounds,
                     windowSizeMode = entry.sizeMode,
-                    reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(56) else 0
+                    reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(56) else 0,
+                    reserveTopBarPx = dp(42),
+                    anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge
                 )
                 renderTaskbarSnapshot(ExternalWindowOverlayBus.taskbarSnapshot.value)
             }
@@ -762,7 +809,7 @@ class AppWindowOverlayService : Service() {
                 putExtra(EXTRA_WINDOW_ID, entry.id)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
-            runCatching { startActivity(intent) }
+            startLauncherActivitySmoothly(intent)
             stopSelf()
         }
     }
@@ -773,7 +820,19 @@ class AppWindowOverlayService : Service() {
             putExtra(EXTRA_OVERLAY_TARGET, target)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-        runCatching { startActivity(intent) }
+        startLauncherActivitySmoothly(intent)
+        stopSelf()
+    }
+
+    private fun openFreeformGuide() {
+        val pkg = currentPackageName
+        ExternalWindowOverlayBus.emitAction(ExternalWindowAction.Minimize(pkg))
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_OPEN_FREEFORM_GUIDE
+            putExtra(EXTRA_PACKAGE_NAME, pkg)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        startLauncherActivitySmoothly(intent)
         stopSelf()
     }
 
@@ -871,7 +930,7 @@ class AppWindowOverlayService : Service() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(40))
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(36))
             background = GradientDrawable().apply {
                 setColor(bgColor)
                 cornerRadius = dp(7).toFloat()
@@ -888,6 +947,13 @@ class AppWindowOverlayService : Service() {
 
     private fun refreshOverlayLabels() {
         titleLabelView?.text = currentAppLabel
+        val iconDrawable = if (currentPackageName.isNotBlank()) loadAppDrawable(currentPackageName) else null
+        if (iconDrawable != null) {
+            titleIconView?.setImageDrawable(iconDrawable)
+            titleIconView?.visibility = View.VISIBLE
+        } else {
+            titleIconView?.visibility = View.GONE
+        }
         modeChipView?.text = shortModeLabel(currentSizeMode)
         snapButtons.forEach { (mode, chip) ->
             val selected = mode == currentSizeMode
@@ -915,7 +981,9 @@ class AppWindowOverlayService : Service() {
             forceLandscape = forceLandscape,
             useFreeformBounds = true,
             windowSizeMode = nextMode,
-            reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(56) else 0
+            reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(56) else 0,
+            reserveTopBarPx = dp(42),
+            anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge
         )
     }
 
@@ -939,7 +1007,20 @@ class AppWindowOverlayService : Service() {
             putExtra(EXTRA_PACKAGE_NAME, packageName)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-        runCatching { startActivity(intent) }
+        startLauncherActivitySmoothly(intent)
+    }
+
+    private fun startLauncherActivitySmoothly(intent: Intent) {
+        val options = runCatching {
+            ActivityOptions.makeCustomAnimation(
+                this,
+                R.anim.win11_return_enter,
+                R.anim.win11_return_exit
+            ).toBundle()
+        }.getOrNull()
+        runCatching {
+            if (options != null) startActivity(intent, options) else startActivity(intent)
+        }
     }
 
     private fun removeCaptionOverlayView() {
@@ -1031,11 +1112,13 @@ class AppWindowOverlayService : Service() {
         const val ACTION_CLOSE_EXTERNAL_APP = "com.example.action.CLOSE_EXTERNAL_APP"
         const val ACTION_OPEN_DESKTOP_OVERLAY = "com.example.action.OPEN_DESKTOP_OVERLAY"
         const val ACTION_FOCUS_INTERNAL_WINDOW = "com.example.action.FOCUS_INTERNAL_WINDOW"
+        const val ACTION_OPEN_FREEFORM_GUIDE = "com.example.action.OPEN_FREEFORM_GUIDE"
 
         const val EXTRA_PACKAGE_NAME = "extra_package_name"
         const val EXTRA_APP_LABEL = "extra_app_label"
         const val EXTRA_WINDOW_SIZE_MODE = "extra_window_size_mode"
         const val EXTRA_FORCE_LANDSCAPE = "extra_force_landscape"
+        const val EXTRA_USE_FREEFORM_BOUNDS = "extra_use_freeform_bounds"
         const val EXTRA_KEEP_TASKBAR = "extra_keep_taskbar"
         const val EXTRA_ANCHOR_BOTTOM_EDGE = "extra_anchor_bottom_edge"
         const val EXTRA_OVERLAY_TARGET = "extra_overlay_target"
@@ -1051,6 +1134,7 @@ class AppWindowOverlayService : Service() {
         private const val NOTIFICATION_ID = 1104
 
         private val COLOR_MICA_BG = Color.parseColor("#EB1C2029")
+        private val COLOR_TITLE_BAR_BG = Color.parseColor("#EE161B24")
         private val COLOR_TASKBAR_BG = Color.parseColor("#EE141822")
         private val COLOR_CARD_SURFACE = Color.parseColor("#FF282E3B")
         private val COLOR_NAVY_BG = Color.parseColor("#FF0B1120")
@@ -1069,6 +1153,7 @@ class AppWindowOverlayService : Service() {
             appLabel: String,
             sizeMode: WindowSizeMode,
             forceLandscape: Boolean,
+            useFreeformBounds: Boolean,
             keepTaskbarOverApps: Boolean,
             anchorTaskbarAtBottomEdge: Boolean
         ) {
@@ -1078,6 +1163,7 @@ class AppWindowOverlayService : Service() {
                 putExtra(EXTRA_APP_LABEL, appLabel)
                 putExtra(EXTRA_WINDOW_SIZE_MODE, sizeMode.key)
                 putExtra(EXTRA_FORCE_LANDSCAPE, forceLandscape)
+                putExtra(EXTRA_USE_FREEFORM_BOUNDS, useFreeformBounds)
                 putExtra(EXTRA_KEEP_TASKBAR, keepTaskbarOverApps)
                 putExtra(EXTRA_ANCHOR_BOTTOM_EDGE, anchorTaskbarAtBottomEdge)
             }

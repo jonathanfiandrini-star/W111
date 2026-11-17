@@ -86,7 +86,7 @@ data class LauncherPreferences(
     val userDisplayName: String = "Usuário",
     val hasSeededDefaults: Boolean = false,
     val forceLandscapeApps: Boolean = true,
-    val useFreeformLaunchBounds: Boolean = false,
+    val useFreeformLaunchBounds: Boolean = true,
     val defaultWindowMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
     val keepTaskbarOverApps: Boolean = true,
     val anchorTaskbarAtBottomEdge: Boolean = false

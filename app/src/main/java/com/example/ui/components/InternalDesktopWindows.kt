@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.ScreenLockLandscape
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.Tune
@@ -103,7 +104,8 @@ fun BoxScope.LauncherSettingsWindow(
     onRequestOverlayPermission: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
     onOpenDefaultHomeSettings: () -> Unit,
-    onOpenNavigationSettings: () -> Unit
+    onOpenNavigationSettings: () -> Unit,
+    onOpenFreeformGuide: () -> Unit
 ) {
     var nameInput by remember(preferences.userDisplayName) { mutableStateOf(preferences.userDisplayName) }
     var cityInput by remember(preferences.weatherCity) { mutableStateOf(preferences.weatherCity) }
@@ -336,6 +338,46 @@ fun BoxScope.LauncherSettingsWindow(
                                 checkedTrackColor = Win11AccentCyan
                             )
                         )
+                    }
+
+                    Surface(
+                        onClick = onOpenFreeformGuide,
+                        color = Win11NavyBg,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Win11BorderSubtle, RoundedCornerShape(8.dp))
+                            .testTag("settings_freeform_guide_btn")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PictureInPictureAlt,
+                                    contentDescription = null,
+                                    tint = Win11AccentCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Guia: limitar apps acima da Barra (Janela Livre)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Win11TextPrimary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Ver guia",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Win11AccentCyan
+                            )
+                        }
                     }
 
                     Surface(

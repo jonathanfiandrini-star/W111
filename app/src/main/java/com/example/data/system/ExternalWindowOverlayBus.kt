@@ -13,7 +13,8 @@ data class ExternalAppSession(
     val packageName: String,
     val appLabel: String,
     val sizeMode: WindowSizeMode,
-    val forceLandscape: Boolean
+    val forceLandscape: Boolean,
+    val useFreeformBounds: Boolean = true
 )
 
 data class TaskbarOverlayEntry(
@@ -33,7 +34,8 @@ data class TaskbarOverlaySnapshot(
     val wifiConnected: Boolean = false,
     val weatherTempLabel: String? = null,
     val keepTaskbarOverApps: Boolean = true,
-    val anchorTaskbarAtBottomEdge: Boolean = false
+    val anchorTaskbarAtBottomEdge: Boolean = false,
+    val useFreeformBounds: Boolean = true
 )
 
 sealed interface ExternalWindowAction {
