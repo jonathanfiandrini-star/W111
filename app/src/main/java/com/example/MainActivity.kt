@@ -9,6 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.data.ai.configureAppCheck
 import com.example.data.model.StickyNoteColor
 import com.example.service.AppWindowOverlayService
@@ -96,6 +99,7 @@ class MainActivity : ComponentActivity() {
         configureAppCheck(this, intent)
 
         enableEdgeToEdge()
+        applyImmersiveNavigation()
         handleOverlayActionIntent(intent)
         setContent {
             Fluent11Theme {
@@ -180,7 +184,24 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        applyImmersiveNavigation()
         viewModel.onLauncherResumed()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveNavigation()
+        }
+    }
+
+    private fun applyImmersiveNavigation() {
+        runCatching {
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.navigationBars())
+        }
     }
 }
 
@@ -371,7 +392,8 @@ fun Fluent11LauncherScreen(
                                     onRequestWriteSettingsPermission = { viewModel.openWriteSettingsPermission() },
                                     onRequestOverlayPermission = { viewModel.openOverlayPermissionSettings() },
                                     onOpenDeveloperSettings = { viewModel.openDeveloperSettings() },
-                                    onOpenDefaultHomeSettings = onRequestDefaultLauncher
+                                    onOpenDefaultHomeSettings = onRequestDefaultLauncher,
+                                    onOpenNavigationSettings = { viewModel.openSystemNavigationSettings() }
                                 )
                             }
                             DesktopWindowKind.INTERNAL_NOTES -> {
@@ -528,7 +550,8 @@ fun Fluent11LauncherScreen(
                         onToggleLandscapeLock = { viewModel.toggleLandscapeLockAction() },
                         onBrightnessChange = { viewModel.setWindowBrightness(it) },
                         onVolumeChange = { viewModel.setMediaVolume(it) },
-                        onOpenSystemSettings = { viewModel.openSystemSettings() }
+                        onOpenSystemSettings = { viewModel.openSystemSettings() },
+                        onOpenNavigationSettings = { viewModel.openSystemNavigationSettings() }
                     )
                 }
 

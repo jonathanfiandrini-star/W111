@@ -124,6 +124,7 @@ class ExampleRobolectricTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("action_tile_home").assertIsDisplayed()
         composeRule.onNodeWithTag("action_tile_overlay_bar").assertIsDisplayed()
+        composeRule.onNodeWithTag("action_tile_gesture_nav").assertIsDisplayed()
 
         composeRule.onNodeWithTag("taskbar_start_button").performClick()
         composeRule.waitForIdle()
@@ -134,6 +135,9 @@ class ExampleRobolectricTest {
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithTag("settings_keep_taskbar_switch")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_gesture_nav_btn")
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithTag("settings_default_home_btn")

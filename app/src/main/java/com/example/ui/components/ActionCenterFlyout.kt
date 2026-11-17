@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.FlashlightOff
 import androidx.compose.material.icons.rounded.FlashlightOn
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.ScreenLockLandscape
@@ -75,6 +76,7 @@ fun ActionCenterFlyout(
     onBrightnessChange: (Float) -> Unit,
     onVolumeChange: (Int) -> Unit,
     onOpenSystemSettings: () -> Unit,
+    onOpenNavigationSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -239,7 +241,43 @@ fun ActionCenterFlyout(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Gesture navigation shortcut to hide Android buttons globally
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .border(1.dp, Win11BorderSubtle, RoundedCornerShape(10.dp))
+                        .clickable(onClick = onOpenNavigationSettings)
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                        .testTag("action_tile_gesture_nav")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Fullscreen,
+                            contentDescription = "Ocultar botões do Android",
+                            tint = Win11AccentCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Ocultar botões Android (Gestos)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Win11TextPrimary
+                        )
+                    }
+                    Text(
+                        text = "Abrir",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Win11AccentCyan
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Brightness Slider
                 Row(

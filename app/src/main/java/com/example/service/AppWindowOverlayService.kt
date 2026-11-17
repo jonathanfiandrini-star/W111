@@ -27,7 +27,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -553,7 +552,6 @@ class AppWindowOverlayService : Service() {
 
         wrapper.addView(row)
 
-        val navInsetBottom = computeNavigationBarBottomInset()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -565,7 +563,7 @@ class AppWindowOverlayService : Service() {
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.START
             x = 0
-            y = navInsetBottom
+            y = 0
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -812,19 +810,6 @@ class AppWindowOverlayService : Service() {
         val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
         taskbarTimeText?.text = timeFmt.format(now)
         taskbarDateText?.text = dateFmt.format(now)
-    }
-
-    private fun computeNavigationBarBottomInset(): Int {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val wm = windowManager
-            val insets = wm?.currentWindowMetrics?.windowInsets
-            val nav = insets?.getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars())
-            if (nav != null && nav.bottom > 0) {
-                return nav.bottom
-            }
-        }
-        val resId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
-        return if (resId > 0) resources.getDimensionPixelSize(resId) else 0
     }
 
     private fun createCaptionButton(

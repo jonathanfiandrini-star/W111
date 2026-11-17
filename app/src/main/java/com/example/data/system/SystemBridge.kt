@@ -325,6 +325,23 @@ class SystemBridge(private val context: Context) {
         startSettingsIntent(Intent(Settings.ACTION_HOME_SETTINGS), Settings.ACTION_SETTINGS)
     }
 
+    fun openSystemNavigationSettings() {
+        val candidates = listOf(
+            Intent("com.android.settings.GESTURE_NAVIGATION_SETTINGS"),
+            Intent("android.settings.SYSTEM_NAVIGATION_SETTINGS"),
+            Intent(Settings.ACTION_DISPLAY_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (candidate in candidates) {
+            candidate.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val resolved = candidate.resolveActivity(context.packageManager)
+            if (resolved != null) {
+                val started = runCatching { context.startActivity(candidate) }.isSuccess
+                if (started) return
+            }
+        }
+    }
+
     private fun startSettingsIntent(primary: Intent, fallbackAction: String) {
         try {
             primary.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

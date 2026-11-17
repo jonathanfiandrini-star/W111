@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.ScreenLockLandscape
@@ -100,7 +101,8 @@ fun BoxScope.LauncherSettingsWindow(
     onRequestWriteSettingsPermission: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
-    onOpenDefaultHomeSettings: () -> Unit
+    onOpenDefaultHomeSettings: () -> Unit,
+    onOpenNavigationSettings: () -> Unit
 ) {
     var nameInput by remember(preferences.userDisplayName) { mutableStateOf(preferences.userDisplayName) }
     var cityInput by remember(preferences.weatherCity) { mutableStateOf(preferences.weatherCity) }
@@ -416,6 +418,53 @@ fun BoxScope.LauncherSettingsWindow(
                             ),
                             modifier = Modifier.testTag("settings_keep_taskbar_switch")
                         )
+                    }
+
+                    Surface(
+                        onClick = onOpenNavigationSettings,
+                        color = Win11NavyBg,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Win11BorderSubtle, RoundedCornerShape(8.dp))
+                            .testTag("settings_gesture_nav_btn")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Fullscreen,
+                                    contentDescription = null,
+                                    tint = Win11AccentCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Ocultar botões do Android (Gestos)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Win11TextPrimary
+                                    )
+                                    Text(
+                                        text = "Já ocultos no Fluent 11. Para retirá-los também nos outros apps, ative Navegação por Gestos nas configurações do tablet.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Win11TextSecondary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Configurar",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Win11AccentCyan
+                            )
+                        }
                     }
 
                     Row(

@@ -258,6 +258,7 @@ class LauncherRepository(
     fun openDisplaySettings() = systemBridge.openDisplaySettings()
     fun openSystemSettings() = systemBridge.openSystemSettings()
     fun openDefaultHomeSettings() = systemBridge.openDefaultHomeSettings()
+    fun openSystemNavigationSettings() = systemBridge.openSystemNavigationSettings()
     fun setMediaVolume(volume: Int) = systemBridge.setMediaVolume(volume)
     fun toggleTorch(): Boolean? = systemBridge.toggleTorch()
     fun readTelemetry(windowBrightness: Float): SystemTelemetry = systemBridge.readTelemetry(windowBrightness)

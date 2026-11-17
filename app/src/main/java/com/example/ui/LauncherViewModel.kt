@@ -1013,6 +1013,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun openDisplaySettings() = repository.openDisplaySettings()
     fun openSystemSettings() = repository.openSystemSettings()
     fun openDefaultHomeSettings() = repository.openDefaultHomeSettings()
+    fun openSystemNavigationSettings() = repository.openSystemNavigationSettings()
 
     fun getFolderChildren(folderId: Long): List<DesktopItemEntity> {
         return uiState.value.allDesktopItems.filter {
