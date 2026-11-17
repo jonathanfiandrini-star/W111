@@ -26,7 +26,6 @@ import android.util.Log
 import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
@@ -35,6 +34,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
@@ -58,7 +58,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class AppWindowOverlayService : Service() {
@@ -94,6 +93,7 @@ class AppWindowOverlayService : Service() {
     private var keepTaskbarOverApps: Boolean = true
     private var anchorTaskbarAtBottomEdge: Boolean = false
     private var snapMenuExpanded: Boolean = false
+    private var lastFreeformToastAtMs: Long = 0L
     private var clockTickerJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -309,19 +309,20 @@ class AppWindowOverlayService : Service() {
             addView(chipView)
         }
 
+        val freeformReady = SystemBridge(this).isSystemFreeformReady()
         val freeformGuidePill = TextView(this).apply {
-            text = "Ajustar"
+            text = if (freeformReady) "Ajustar" else "Ajustar !"
             contentDescription = "Guia de janela acima da Barra"
-            setTextColor(COLOR_ACCENT_CYAN)
+            setTextColor(if (freeformReady) COLOR_ACCENT_CYAN else Color.parseColor("#FFFFD166"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(4), dp(10), dp(4))
             minHeight = dp(28)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#2060CDFF"))
+                setColor(if (freeformReady) Color.parseColor("#2060CDFF") else Color.parseColor("#24FFD166"))
                 cornerRadius = dp(7).toFloat()
-                setStroke(dp(1), COLOR_BORDER_HIGHLIGHT)
+                setStroke(dp(1), if (freeformReady) COLOR_BORDER_HIGHLIGHT else Color.parseColor("#88FFD166"))
             }
             setOnClickListener { openFreeformGuide() }
         }
@@ -797,9 +798,10 @@ class AppWindowOverlayService : Service() {
                     forceLandscape = forceLandscape,
                     useFreeformBounds = useFreeformBounds,
                     windowSizeMode = entry.sizeMode,
-                    reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(56) else 0,
-                    reserveTopBarPx = dp(42),
-                    anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge
+                    reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(58) else 0,
+                    reserveTopBarPx = dp(40),
+                    anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
+                    isExplicitResize = false
                 )
                 renderTaskbarSnapshot(ExternalWindowOverlayBus.taskbarSnapshot.value)
             }
@@ -976,15 +978,28 @@ class AppWindowOverlayService : Service() {
         ExternalWindowOverlayBus.emitAction(
             ExternalWindowAction.Resize(currentPackageName, nextMode)
         )
-        SystemBridge(this).launchApp(
+        val bridge = SystemBridge(this)
+        val launched = bridge.launchApp(
             packageName = currentPackageName,
             forceLandscape = forceLandscape,
             useFreeformBounds = true,
             windowSizeMode = nextMode,
-            reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(56) else 0,
-            reserveTopBarPx = dp(42),
-            anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge
+            reserveBottomTaskbarPx = if (keepTaskbarOverApps) dp(58) else 0,
+            reserveTopBarPx = dp(40),
+            anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
+            isExplicitResize = true
         )
+        if (!bridge.isSystemFreeformReady() || !launched) {
+            val now = System.currentTimeMillis()
+            if (now - lastFreeformToastAtMs > 3500L) {
+                lastFreeformToastAtMs = now
+                Toast.makeText(
+                    this,
+                    "Para redimensionar apps externos, toque em \"Ajustar !\" e ative Janelas de forma livre no tablet.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun onMinimizeClicked() {

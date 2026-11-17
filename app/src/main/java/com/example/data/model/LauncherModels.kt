@@ -109,8 +109,14 @@ data class SystemTelemetry(
     val canWriteSystemSettings: Boolean = false,
     val isRotationLockedLandscape: Boolean = false,
     val isDefaultLauncher: Boolean = false,
-    val canDrawOverlays: Boolean = false
-)
+    val canDrawOverlays: Boolean = false,
+    val hasFreeformFeature: Boolean = false,
+    val freeformSystemEnabled: Boolean = false,
+    val forceResizableEnabled: Boolean = false
+) {
+    val isSystemFreeformReady: Boolean
+        get() = hasFreeformFeature || freeformSystemEnabled
+}
 
 sealed interface WeatherState {
     data object Loading : WeatherState

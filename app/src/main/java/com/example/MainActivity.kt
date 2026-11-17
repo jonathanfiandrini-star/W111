@@ -768,9 +768,11 @@ fun Fluent11LauncherScreen(
 
     if (uiState.showFreeformGuideDialog) {
         FreeformModeGuideDialog(
+            telemetry = uiState.telemetry,
             useFreeformLaunchBounds = uiState.preferences.useFreeformLaunchBounds,
             onToggleFreeformBounds = { viewModel.setUseFreeformLaunchBounds(it) },
             onOpenDeveloperSettings = { viewModel.openDeveloperSettings() },
+            onOpenOwnAppSettings = { viewModel.openOwnAppSettings() },
             onDismiss = { viewModel.dismissFreeformGuideDialog() }
         )
     }

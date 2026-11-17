@@ -1,7 +1,9 @@
 package com.example.data.system
 
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.app.role.RoleManager
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -181,6 +183,28 @@ class SystemBridge(private val context: Context) {
         )
     }
 
+    fun openOwnAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null)
+        )
+        startSettingsIntent(intent, Settings.ACTION_SETTINGS)
+    }
+
+    fun hasFreeformFeature(): Boolean = runCatching {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT)
+    }.getOrDefault(false)
+
+    fun isFreeformSystemEnabled(): Boolean = runCatching {
+        Settings.Global.getInt(context.contentResolver, "enable_freeform_support", 0) == 1
+    }.getOrDefault(false)
+
+    fun isForceResizableEnabled(): Boolean = runCatching {
+        Settings.Global.getInt(context.contentResolver, "force_resizable_activities", 0) == 1
+    }.getOrDefault(false)
+
+    fun isSystemFreeformReady(): Boolean = hasFreeformFeature() || isFreeformSystemEnabled()
+
     fun enforceLandscapeRotation(): Boolean {
         if (!canWriteSystemSettings()) return false
         return try {
@@ -227,60 +251,96 @@ class SystemBridge(private val context: Context) {
         windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
         reserveBottomTaskbarPx: Int = 0,
         reserveTopBarPx: Int = 0,
-        anchorTaskbarAtBottomEdge: Boolean = false
+        anchorTaskbarAtBottomEdge: Boolean = false,
+        isExplicitResize: Boolean = false
     ): Boolean {
         return try {
             val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+            if (windowSizeMode == WindowSizeMode.SPLIT_LEFT || windowSizeMode == WindowSizeMode.SPLIT_RIGHT) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+            }
+            if (isExplicitResize) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            }
+
             if (forceLandscape) {
                 enforceLandscapeRotation()
             }
 
-            if (windowSizeMode == WindowSizeMode.SPLIT_LEFT || windowSizeMode == WindowSizeMode.SPLIT_RIGHT) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+            val shouldApplyBounds = useFreeformBounds || windowSizeMode != WindowSizeMode.MAXIMIZED
+            val options = if (shouldApplyBounds) {
+                // Use makeBasic() when requesting freeform bounds so OEMs don't override freeform animation/windowing
+                ActivityOptions.makeBasic()
+            } else {
+                runCatching {
+                    ActivityOptions.makeCustomAnimation(
+                        context,
+                        R.anim.win11_app_enter,
+                        R.anim.win11_app_exit
+                    )
+                }.getOrElse { ActivityOptions.makeBasic() }
             }
 
-            val options = runCatching {
-                ActivityOptions.makeCustomAnimation(
-                    context,
-                    R.anim.win11_app_enter,
-                    R.anim.win11_app_exit
-                )
-            }.getOrElse { ActivityOptions.makeBasic() }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                runCatching {
+                    options.setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                }
+            }
 
-            val shouldApplyBounds = useFreeformBounds || windowSizeMode != WindowSizeMode.MAXIMIZED
             if (shouldApplyBounds) {
                 val (screenW, screenH, topInsetPx, navBottomPx) = readScreenFrameMetrics()
+                val density = context.resources.displayMetrics.density
                 val topBound = maxOf(reserveTopBarPx, topInsetPx)
                 val navAllowance = if (anchorTaskbarAtBottomEdge) 0 else navBottomPx
                 val bottomReserved = reserveBottomTaskbarPx + navAllowance
                 val usableBottom = (screenH - bottomReserved).coerceAtLeast(topBound + 280)
                 val usableHeight = (usableBottom - topBound).coerceAtLeast(280)
+                val edgeInset = (2f * density).toInt().coerceAtLeast(2)
+                val maxW = (screenW - edgeInset * 2).coerceAtLeast(480)
 
                 val rect = when (windowSizeMode) {
                     WindowSizeMode.COMPACT -> {
-                        val w = (screenW * 0.68f).toInt().coerceAtLeast(520)
-                        val h = (usableHeight * 0.80f).toInt().coerceAtLeast(300)
-                        val l = ((screenW - w) / 2).coerceAtLeast(0)
+                        val w = (screenW * 0.68f).toInt().coerceIn(480, maxW)
+                        val h = (usableHeight * 0.80f).toInt().coerceIn(300, usableHeight)
+                        val l = ((screenW - w) / 2).coerceAtLeast(edgeInset)
                         val t = (topBound + (usableHeight - h) / 2).coerceAtLeast(topBound)
                         Rect(l, t, l + w, t + h)
                     }
                     WindowSizeMode.SPLIT_LEFT -> {
-                        val halfW = (screenW / 2).coerceAtLeast(360)
-                        Rect(0, topBound, halfW, usableBottom)
+                        val halfW = (screenW / 2 - edgeInset).coerceAtLeast(360)
+                        Rect(edgeInset, topBound, edgeInset + halfW, usableBottom)
                     }
                     WindowSizeMode.SPLIT_RIGHT -> {
-                        val halfW = (screenW / 2).coerceAtLeast(360)
-                        Rect(halfW, topBound, screenW, usableBottom)
+                        val halfW = (screenW / 2 - edgeInset).coerceAtLeast(360)
+                        Rect(screenW - halfW - edgeInset, topBound, screenW - edgeInset, usableBottom)
                     }
                     WindowSizeMode.MAXIMIZED -> {
-                        Rect(0, topBound, screenW, usableBottom)
+                        Rect(edgeInset, topBound, screenW - edgeInset, usableBottom)
                     }
                 }
                 options.setLaunchBounds(rect)
             }
-            context.startActivity(intent, options.toBundle())
+
+            val bundle = options.toBundle()
+            if (context !is Activity && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val pendingResult = runCatching {
+                    PendingIntent.getActivity(
+                        context,
+                        packageName.hashCode(),
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    ).send(context, 0, null, null, null, null, bundle)
+                }
+                if (pendingResult.isFailure) {
+                    context.startActivity(intent, bundle)
+                }
+            } else {
+                context.startActivity(intent, bundle)
+            }
             true
         } catch (_: Exception) {
             false
@@ -493,7 +553,10 @@ class SystemBridge(private val context: Context) {
             canWriteSystemSettings = canWriteSettings,
             isRotationLockedLandscape = isLandscapeLocked,
             isDefaultLauncher = isDefaultLauncher(),
-            canDrawOverlays = canDrawOverlays()
+            canDrawOverlays = canDrawOverlays(),
+            hasFreeformFeature = hasFreeformFeature(),
+            freeformSystemEnabled = isFreeformSystemEnabled(),
+            forceResizableEnabled = isForceResizableEnabled()
         )
     }
 }

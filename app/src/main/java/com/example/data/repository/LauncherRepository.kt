@@ -236,7 +236,8 @@ class LauncherRepository(
         windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
         reserveBottomTaskbarPx: Int = 0,
         reserveTopBarPx: Int = 0,
-        anchorTaskbarAtBottomEdge: Boolean = false
+        anchorTaskbarAtBottomEdge: Boolean = false,
+        isExplicitResize: Boolean = false
     ): Boolean = systemBridge.launchApp(
         packageName = packageName,
         forceLandscape = forceLandscape,
@@ -244,16 +245,19 @@ class LauncherRepository(
         windowSizeMode = windowSizeMode,
         reserveBottomTaskbarPx = reserveBottomTaskbarPx,
         reserveTopBarPx = reserveTopBarPx,
-        anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge
+        anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
+        isExplicitResize = isExplicitResize
     )
 
     fun canWriteSystemSettings(): Boolean = systemBridge.canWriteSystemSettings()
     fun canDrawOverlays(): Boolean = systemBridge.canDrawOverlays()
+    fun isSystemFreeformReady(): Boolean = systemBridge.isSystemFreeformReady()
     fun isDefaultLauncher(): Boolean = systemBridge.isDefaultLauncher()
     fun createDefaultLauncherPromptIntent() = systemBridge.createDefaultLauncherPromptIntent()
     fun openWriteSettingsPermission() = systemBridge.openWriteSettingsPermission()
     fun openOverlayPermissionSettings() = systemBridge.openOverlayPermissionSettings()
     fun openDeveloperSettings() = systemBridge.openDeveloperSettings()
+    fun openOwnAppSettings() = systemBridge.openOwnAppSettings()
     fun enforceLandscapeRotation(): Boolean = systemBridge.enforceLandscapeRotation()
     fun openAppInfo(packageName: String) = systemBridge.openAppInfo(packageName)
     fun uninstallApp(packageName: String) = systemBridge.uninstallApp(packageName)

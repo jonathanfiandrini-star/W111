@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.CreateNewFolder
@@ -47,11 +48,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.data.local.DesktopItemEntity
 import com.example.data.model.InstalledApp
+import com.example.data.model.SystemTelemetry
 import com.example.ui.theme.Win11AccentCyan
 import com.example.ui.theme.Win11CardSurface
 import com.example.ui.theme.Win11MicaSurface
@@ -508,11 +511,16 @@ fun GestureNavigationGuideDialog(
 
 @Composable
 fun FreeformModeGuideDialog(
+    telemetry: SystemTelemetry,
     useFreeformLaunchBounds: Boolean,
     onToggleFreeformBounds: (Boolean) -> Unit,
     onOpenDeveloperSettings: () -> Unit,
+    onOpenOwnAppSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val freeformReady = telemetry.isSystemFreeformReady
+    val resizableReady = telemetry.forceResizableEnabled
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Win11MicaSurface,
@@ -534,9 +542,65 @@ fun FreeformModeGuideDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                // Live system status diagnostic card
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Win11CardSurface)
+                        .padding(12.dp)
+                        .testTag("freeform_status_badge")
+                ) {
+                    Text(
+                        text = "Diagnóstico atual do sistema:",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Win11AccentCyan
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Janelas de forma livre (Android)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Win11TextPrimary
+                        )
+                        Text(
+                            text = if (freeformReady) "Ativo ✓" else "Desativado",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (freeformReady) Win11AccentCyan else Color(0xFFFFD166)
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Forçar redimensionamento de atividades",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Win11TextPrimary
+                        )
+                        Text(
+                            text = if (resizableReady) "Ativo ✓" else "Desativado",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (resizableReady) Win11AccentCyan else Color(0xFFFFD166)
+                        )
+                    }
+                }
+
                 Text(
-                    text = "O Fluent 11 já envia o tamanho exato entre a barra superior e a Barra de Tarefas inferior ao abrir aplicativos. Para o Android respeitar esse limite em qualquer app, ative o modo Janela Livre no sistema.",
+                    text = if (freeformReady) {
+                        "O modo Janela Livre já está ativo neste dispositivo. Se um app já estava aberto em tela cheia, feche-o nos Recentes uma vez e reabra pelo Fluent 11."
+                    } else {
+                        "O Android ignora redimensionamentos de outros apps quando \"Janelas de forma livre\" está desativado no sistema."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Win11TextSecondary
                 )
@@ -555,7 +619,7 @@ fun FreeformModeGuideDialog(
                         color = Win11AccentCyan
                     )
                     Text(
-                        text = "1. Toque em \"Opções do Desenvolvedor\" abaixo.\n2. Ative \"Ativar janelas de forma livre\" e \"Forçar redimensionamento de atividades\".\n3. Volte ao Fluent 11 e abra o app — ele ficará delimitado acima da Barra de Tarefas.",
+                        text = "1. Toque em \"Opções do Desenvolvedor\" abaixo.\n2. Ative \"Ativar janelas de forma livre\" e \"Forçar redimensionamento de atividades\" (e reinicie o tablet se o sistema pedir).\n3. No Xiaomi Pad / HyperOS: você também pode ativar o \"Modo Estação de Trabalho\" na Central de Controle ou tocar nos 3 pontos (•••) no topo do app.\n4. Em \"Permissões do app\", libere \"Exibir janelas pop-up em segundo plano\" para redimensionar direto pela barra superior.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Win11TextPrimary
                     )
@@ -596,15 +660,23 @@ fun FreeformModeGuideDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = onOpenDeveloperSettings,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Win11AccentCyan,
-                    contentColor = Win11NavyBg
-                ),
-                modifier = Modifier.testTag("freeform_guide_dev_btn")
-            ) {
-                Text("Opções do Desenvolvedor")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(
+                    onClick = onOpenOwnAppSettings,
+                    modifier = Modifier.testTag("freeform_guide_app_info_btn")
+                ) {
+                    Text("Permissões", color = Win11AccentCyan)
+                }
+                Button(
+                    onClick = onOpenDeveloperSettings,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Win11AccentCyan,
+                        contentColor = Win11NavyBg
+                    ),
+                    modifier = Modifier.testTag("freeform_guide_dev_btn")
+                ) {
+                    Text("Desenvolvedor")
+                }
             }
         },
         dismissButton = {

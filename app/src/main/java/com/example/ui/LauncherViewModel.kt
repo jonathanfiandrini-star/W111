@@ -562,7 +562,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         taskbarPopoverWindowIdFlow.value = null
 
         if (existing.kind == DesktopWindowKind.EXTERNAL_APP && existing.packageName != null) {
-            launchApp(existing.packageName, overrideSizeMode = nextMode)
+            if (!repository.isSystemFreeformReady()) {
+                showBanner("Ative 'Janelas de forma livre' em Opções do Desenvolvedor para redimensionar apps.")
+            }
+            launchApp(
+                existing.packageName,
+                overrideSizeMode = nextMode,
+                isExplicitResize = true
+            )
         }
     }
 
@@ -611,7 +618,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun launchApp(
         packageName: String,
         overrideSizeMode: WindowSizeMode? = null,
-        bypassOverlayPrompt: Boolean = false
+        bypassOverlayPrompt: Boolean = false,
+        isExplicitResize: Boolean = false
     ) {
         val prefs = uiState.value.preferences
         val existingWin = openWindowsFlow.value.firstOrNull { it.windowId == "app_$packageName" }
@@ -632,12 +640,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
         val density = getApplication<Application>().resources.displayMetrics.density
         val reserveTaskbarPx = if (prefs.keepTaskbarOverApps && hasOverlayPermission) {
-            (56f * density).roundToInt()
+            (58f * density).roundToInt()
         } else {
             0
         }
         val reserveTopBarPx = if (hasOverlayPermission) {
-            (42f * density).roundToInt()
+            (40f * density).roundToInt()
         } else {
             0
         }
@@ -673,7 +681,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             windowSizeMode = modeToUse,
             reserveBottomTaskbarPx = reserveTaskbarPx,
             reserveTopBarPx = reserveTopBarPx,
-            anchorTaskbarAtBottomEdge = prefs.anchorTaskbarAtBottomEdge
+            anchorTaskbarAtBottomEdge = prefs.anchorTaskbarAtBottomEdge,
+            isExplicitResize = isExplicitResize
         )
         if (launched) {
             val winId = "app_$packageName"
@@ -898,12 +907,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun openFreeformGuideDialog() {
         dismissOverlay()
+        refreshTelemetry()
         showFreeformGuideDialogFlow.value = true
     }
 
     fun dismissFreeformGuideDialog() {
         showFreeformGuideDialogFlow.value = false
     }
+
+    fun openOwnAppSettings() = repository.openOwnAppSettings()
 
     // --- Copilot AI (Firebase AI Logic) ---
 
