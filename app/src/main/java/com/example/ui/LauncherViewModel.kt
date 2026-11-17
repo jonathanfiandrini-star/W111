@@ -20,16 +20,34 @@ import com.example.data.model.StickyNoteColor
 import com.example.data.model.SystemTelemetry
 import com.example.data.model.WeatherState
 import com.example.data.model.WindowSizeMode
+import android.content.Intent
+import android.util.Log
+import com.example.data.ai.CopilotHistoryTurn
+import com.example.data.ai.CopilotRepository
+import com.example.data.model.CopilotChatMessage
+import com.example.data.model.CopilotUiState
 import com.example.data.preferences.LauncherPreferencesRepository
 import com.example.data.repository.LauncherRepository
+import com.example.data.system.ExternalAppSession
+import com.example.data.system.ExternalWindowAction
+import com.example.data.system.ExternalWindowOverlayBus
 import com.example.data.system.SystemBridge
+import com.example.data.system.TaskbarOverlayEntry
+import com.example.data.system.TaskbarOverlaySnapshot
+import com.example.service.AppWindowOverlayService
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlin.math.roundToInt
 
 data class LauncherUiState(
     val installedApps: List<InstalledApp> = emptyList(),
@@ -73,6 +91,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val openWindowsFlow = MutableStateFlow<List<DesktopWindowState>>(emptyList())
     private val activeWindowIdFlow = MutableStateFlow<String?>(null)
     private val taskbarPopoverWindowIdFlow = MutableStateFlow<String?>(null)
+    private var hasPromptedDefaultLauncherThisSession = false
+
+    private val copilotRepository = CopilotRepository()
+    private val _copilotUiState = MutableStateFlow(CopilotUiState())
+    val copilotUiState: StateFlow<CopilotUiState> = _copilotUiState.asStateFlow()
+    private var copilotJob: Job? = null
 
     private data class CoreStreams(
         val apps: List<InstalledApp>,
@@ -184,6 +208,112 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         refreshInstalledApps(seedIfNeeded = true)
         startPeriodicTickers()
         observeWeatherCity()
+        observeExternalOverlayActions()
+        syncTaskbarOverlaySnapshot()
+    }
+
+    private fun syncTaskbarOverlaySnapshot() {
+        viewModelScope.launch {
+            combine(
+                coreStreamsFlow,
+                uiControlStreamsFlow,
+                openWindowsFlow,
+                activeWindowIdFlow
+            ) { core, controls, windows, activeWinId ->
+                val appsMap = core.apps.associateBy { it.packageName }
+                val pinnedBar = core.pinned
+                    .filter { it.target == PinTarget.TASKBAR.name }
+                    .mapNotNull { appsMap[it.packageName] }
+                val pinnedPackages = pinnedBar.map { it.packageName }.toSet()
+                val windowsByPkg = windows.filter { it.packageName != null }.associateBy { it.packageName!! }
+
+                val entries = mutableListOf<TaskbarOverlayEntry>()
+                pinnedBar.forEach { app ->
+                    val openWin = windowsByPkg[app.packageName]
+                    entries += TaskbarOverlayEntry(
+                        id = openWin?.windowId ?: "pin_${app.packageName}",
+                        label = app.label,
+                        packageName = app.packageName,
+                        kind = DesktopWindowKind.EXTERNAL_APP,
+                        isOpen = openWin != null,
+                        isActive = openWin != null && !openWin.isMinimized && activeWinId == openWin.windowId,
+                        sizeMode = openWin?.sizeMode ?: controls.prefs.defaultWindowMode
+                    )
+                }
+                windows.filter { it.packageName == null || !pinnedPackages.contains(it.packageName) }
+                    .forEach { win ->
+                        entries += TaskbarOverlayEntry(
+                            id = win.windowId,
+                            label = win.title,
+                            packageName = win.packageName,
+                            kind = win.kind,
+                            isOpen = true,
+                            isActive = !win.isMinimized && activeWinId == win.windowId,
+                            sizeMode = win.sizeMode
+                        )
+                    }
+
+                val weatherTemp = (controls.weather as? WeatherState.Success)?.let { "${it.temperatureCelsius}°C" }
+                TaskbarOverlaySnapshot(
+                    entries = entries,
+                    batteryPercent = controls.telemetry.batteryPercent,
+                    isCharging = controls.telemetry.isCharging,
+                    wifiConnected = controls.telemetry.wifiConnected,
+                    weatherTempLabel = weatherTemp,
+                    keepTaskbarOverApps = controls.prefs.keepTaskbarOverApps
+                )
+            }.collect { snapshot ->
+                ExternalWindowOverlayBus.updateTaskbarSnapshot(snapshot)
+            }
+        }
+    }
+
+    private fun observeExternalOverlayActions() {
+        viewModelScope.launch {
+            ExternalWindowOverlayBus.actions.collect { action ->
+                when (action) {
+                    is ExternalWindowAction.Minimize -> handleExternalWindowMinimize(action.packageName)
+                    is ExternalWindowAction.Resize -> {
+                        val winId = "app_${action.packageName}"
+                        openWindowsFlow.value = openWindowsFlow.value.map {
+                            if (it.windowId == winId) {
+                                it.copy(sizeMode = action.sizeMode, lastFocusedAt = System.currentTimeMillis())
+                            } else it
+                        }
+                    }
+                    is ExternalWindowAction.Close -> handleExternalWindowClose(action.packageName)
+                    is ExternalWindowAction.SwitchToApp -> {
+                        val winId = "app_${action.packageName}"
+                        val now = System.currentTimeMillis()
+                        val prev = openWindowsFlow.value.map { win ->
+                            if (win.kind == DesktopWindowKind.EXTERNAL_APP && win.windowId != winId) {
+                                win.copy(isMinimized = true)
+                            } else win
+                        }
+                        val exists = prev.any { it.windowId == winId }
+                        openWindowsFlow.value = if (exists) {
+                            prev.map {
+                                if (it.windowId == winId) {
+                                    it.copy(isMinimized = false, sizeMode = action.sizeMode, lastFocusedAt = now)
+                                } else it
+                            }
+                        } else {
+                            prev + DesktopWindowState(
+                                windowId = winId,
+                                kind = DesktopWindowKind.EXTERNAL_APP,
+                                title = action.appLabel,
+                                packageName = action.packageName,
+                                sizeMode = action.sizeMode,
+                                isMinimized = false,
+                                lastFocusedAt = now
+                            )
+                        }
+                        activeWindowIdFlow.value = winId
+                        launch { repository.recordAppLaunch(action.packageName) }
+                    }
+                }
+            }
+        }
     }
 
     private fun startPeriodicTickers() {
@@ -227,6 +357,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onLauncherResumed() {
+        AppWindowOverlayService.stopOverlay(getApplication())
+        ExternalWindowOverlayBus.clearSession()
         // When returning from an external app, mark external app windows as minimized in the Taskbar
         val updated = openWindowsFlow.value.map { win ->
             if (win.kind == DesktopWindowKind.EXTERNAL_APP) win.copy(isMinimized = true) else win
@@ -237,6 +369,16 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
         refreshInstalledApps(seedIfNeeded = false)
         refreshTelemetry()
+    }
+
+    fun handleExternalWindowMinimize(packageName: String) {
+        if (packageName.isBlank()) return
+        minimizeWindow("app_$packageName")
+    }
+
+    fun handleExternalWindowClose(packageName: String) {
+        if (packageName.isBlank()) return
+        closeWindow("app_$packageName")
     }
 
     fun refreshWeather(cityOverride: String? = null) {
@@ -423,12 +565,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val prefs = uiState.value.preferences
         val existingWin = openWindowsFlow.value.firstOrNull { it.windowId == "app_$packageName" }
         val modeToUse = overrideSizeMode ?: existingWin?.sizeMode ?: prefs.defaultWindowMode
+        val reserveTaskbarPx = if (prefs.keepTaskbarOverApps && repository.canDrawOverlays()) {
+            val density = getApplication<Application>().resources.displayMetrics.density
+            (56f * density).roundToInt()
+        } else {
+            0
+        }
 
         val launched = repository.launchApp(
             packageName = packageName,
             forceLandscape = prefs.forceLandscapeApps,
             useFreeformBounds = prefs.useFreeformLaunchBounds,
-            windowSizeMode = modeToUse
+            windowSizeMode = modeToUse,
+            reserveBottomTaskbarPx = reserveTaskbarPx
         )
         if (launched) {
             val appLabel = uiState.value.installedAppsByPackage[packageName]?.label ?: packageName
@@ -458,6 +607,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             }
             openWindowsFlow.value = updatedList
             activeWindowIdFlow.value = winId
+
+            ExternalWindowOverlayBus.setSession(
+                ExternalAppSession(
+                    packageName = packageName,
+                    appLabel = appLabel,
+                    sizeMode = modeToUse,
+                    forceLandscape = prefs.forceLandscapeApps
+                )
+            )
+            if (repository.canDrawOverlays()) {
+                AppWindowOverlayService.startOverlay(
+                    context = getApplication(),
+                    packageName = packageName,
+                    appLabel = appLabel,
+                    sizeMode = modeToUse,
+                    forceLandscape = prefs.forceLandscapeApps,
+                    keepTaskbarOverApps = prefs.keepTaskbarOverApps
+                )
+            }
 
             viewModelScope.launch { repository.recordAppLaunch(packageName) }
             dismissOverlay()
@@ -595,6 +763,116 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun setKeepTaskbarOverApps(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setKeepTaskbarOverApps(enabled)
+            showBanner(
+                if (enabled) "Barra de Tarefas fixa sobre aplicativos ativada"
+                else "Barra de Tarefas oculta ao abrir aplicativos"
+            )
+        }
+    }
+
+    // --- Copilot AI (Firebase AI Logic) ---
+
+    fun askCopilotFromSearch(query: String) {
+        activeOverlayFlow.value = ActiveOverlay.Copilot
+        searchQueryFlow.value = ""
+        if (query.isNotBlank()) {
+            sendCopilotPrompt(query)
+        }
+    }
+
+    fun sendCopilotPrompt(rawPrompt: String) {
+        val prompt = rawPrompt.trim()
+        if (prompt.isEmpty() || _copilotUiState.value.isLoading) return
+
+        val priorHistory = _copilotUiState.value.messages
+            .filter { !it.isStreaming && it.text.isNotBlank() }
+            .map { CopilotHistoryTurn(isUser = it.isUser, text = it.text) }
+
+        val userMsgId = "u_${System.currentTimeMillis()}"
+        val modelMsgId = "m_${System.currentTimeMillis() + 1}"
+
+        _copilotUiState.value = _copilotUiState.value.copy(
+            messages = _copilotUiState.value.messages +
+                CopilotChatMessage(id = userMsgId, isUser = true, text = prompt) +
+                CopilotChatMessage(id = modelMsgId, isUser = false, text = "", isStreaming = true),
+            isLoading = true,
+            errorMessage = null
+        )
+
+        val appLabels = uiState.value.installedApps.map { it.label }
+        copilotJob?.cancel()
+        copilotJob = viewModelScope.launch {
+            val acc = StringBuilder()
+            try {
+                withTimeout(60_000L) {
+                    copilotRepository.streamResponse(
+                        prompt = prompt,
+                        installedAppNames = appLabels,
+                        history = priorHistory
+                    ).collect { chunk ->
+                        acc.append(chunk)
+                        updateStreamingMessage(modelMsgId, acc.toString(), streaming = true)
+                    }
+                }
+                val finalText = acc.toString().trim()
+                if (finalText.isNotEmpty()) {
+                    updateStreamingMessage(modelMsgId, finalText, streaming = false)
+                    _copilotUiState.value = _copilotUiState.value.copy(isLoading = false)
+                } else {
+                    removeMessage(modelMsgId)
+                    _copilotUiState.value = _copilotUiState.value.copy(
+                        isLoading = false,
+                        errorMessage = "O modelo retornou uma resposta vazia."
+                    )
+                }
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Copilot generation timed out", e)
+                removeMessageIfBlank(modelMsgId)
+                _copilotUiState.value = _copilotUiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "A resposta expirou após 60 segundos. Tente novamente."
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Copilot Firebase AI generation failed", e)
+                removeMessageIfBlank(modelMsgId)
+                _copilotUiState.value = _copilotUiState.value.copy(
+                    isLoading = false,
+                    errorMessage = e.localizedMessage ?: "Falha ao consultar o Gemini via Firebase AI Logic."
+                )
+            }
+        }
+    }
+
+    fun clearCopilotChat() {
+        copilotJob?.cancel()
+        _copilotUiState.value = CopilotUiState()
+    }
+
+    private fun updateStreamingMessage(id: String, text: String, streaming: Boolean) {
+        _copilotUiState.value = _copilotUiState.value.copy(
+            messages = _copilotUiState.value.messages.map {
+                if (it.id == id) it.copy(text = text, isStreaming = streaming) else it
+            }
+        )
+    }
+
+    private fun removeMessage(id: String) {
+        _copilotUiState.value = _copilotUiState.value.copy(
+            messages = _copilotUiState.value.messages.filterNot { it.id == id }
+        )
+    }
+
+    private fun removeMessageIfBlank(id: String) {
+        _copilotUiState.value = _copilotUiState.value.copy(
+            messages = _copilotUiState.value.messages.filterNot { it.id == id && it.text.isBlank() }
+        )
+    }
+
     fun toggleLandscapeLockAction() {
         val prefs = uiState.value.preferences
         if (!repository.canWriteSystemSettings()) {
@@ -606,7 +884,23 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun openWriteSettingsPermission() = repository.openWriteSettingsPermission()
+    fun openOverlayPermissionSettings() = repository.openOverlayPermissionSettings()
     fun openDeveloperSettings() = repository.openDeveloperSettings()
+
+    fun consumeStartupDefaultLauncherIntent(): Intent? {
+        if (hasPromptedDefaultLauncherThisSession) return null
+        hasPromptedDefaultLauncherThisSession = true
+        return repository.createDefaultLauncherPromptIntent()
+    }
+
+    fun getDefaultLauncherPromptIntent(): Intent? = repository.createDefaultLauncherPromptIntent()
+
+    fun onDefaultLauncherRoleResult() {
+        refreshTelemetry()
+        if (repository.isDefaultLauncher()) {
+            showBanner("Fluent 11 definido como launcher padrão!")
+        }
+    }
 
     fun setMediaVolume(volume: Int) {
         repository.setMediaVolume(volume)
@@ -657,6 +951,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     companion object {
+        private const val TAG = "LauncherViewModel"
         const val WINDOW_ID_SETTINGS = "internal_settings"
         const val WINDOW_ID_NOTES = "internal_notes"
     }

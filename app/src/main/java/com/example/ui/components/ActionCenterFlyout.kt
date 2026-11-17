@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.FlashlightOff
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.ScreenLockLandscape
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Wifi
@@ -69,6 +70,7 @@ fun ActionCenterFlyout(
     onToggleMute: () -> Unit,
     onOpenNetwork: () -> Unit,
     onOpenDefaultHome: () -> Unit,
+    onOpenOverlayPermission: () -> Unit,
     onToggleLandscapeLock: () -> Unit,
     onBrightnessChange: (Float) -> Unit,
     onVolumeChange: (Int) -> Unit,
@@ -144,8 +146,8 @@ fun ActionCenterFlyout(
                     )
                     QuickActionTile(
                         icon = Icons.Rounded.Home,
-                        label = "Launcher",
-                        active = true,
+                        label = if (telemetry.isDefaultLauncher) "Padrão ✓" else "Launcher",
+                        active = telemetry.isDefaultLauncher,
                         onClick = onOpenDefaultHome,
                         testTag = "action_tile_home",
                         modifier = Modifier.weight(1f)
@@ -194,6 +196,46 @@ fun ActionCenterFlyout(
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = if (landscapeReady) Win11AccentCyan else Win11TextSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Floating window bar permission status
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (telemetry.canDrawOverlays) Win11AccentCyan.copy(alpha = 0.16f) else Win11CardSurface)
+                        .border(
+                            1.dp,
+                            if (telemetry.canDrawOverlays) Win11AccentCyan else Win11BorderSubtle,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable(onClick = onOpenOverlayPermission)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("action_tile_overlay_bar")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Layers,
+                            contentDescription = "Barra flutuante sobre apps",
+                            tint = if (telemetry.canDrawOverlays) Win11AccentCyan else Win11TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Barra nos apps nativos",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Win11TextPrimary
+                        )
+                    }
+                    Text(
+                        text = if (telemetry.canDrawOverlays) "Ativa" else "Permitir",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (telemetry.canDrawOverlays) Win11AccentCyan else Win11TextSecondary
                     )
                 }
 

@@ -116,4 +116,44 @@ class ExampleRobolectricTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("taskbar_win_internal_settings").assertDoesNotExist()
     }
+
+    @Test
+    fun `action center and settings expose default launcher and overlay bar controls`() {
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("taskbar_system_tray").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("action_tile_home").assertIsDisplayed()
+        composeRule.onNodeWithTag("action_tile_overlay_bar").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("taskbar_start_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("start_launcher_settings_btn").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("settings_grant_overlay_btn")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_keep_taskbar_switch")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_default_home_btn")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `copilot opens from taskbar and search shortcut`() {
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("taskbar_copilot_button").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("copilot_flyout").assertIsDisplayed()
+        composeRule.onNodeWithTag("copilot_input_field").assertIsDisplayed()
+
+        // Switch to Search and jump back into Copilot via shortcut
+        composeRule.onNodeWithTag("taskbar_search_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("search_ask_copilot_btn").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("copilot_flyout").assertIsDisplayed()
+    }
 }

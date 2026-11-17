@@ -1,0 +1,101 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build Fluent 11 Launcher APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Restore debug keystore for signing
+        run: |
+          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Run unit tests & build Debug APK
+        run: gradle :app:testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Build Release APK (optional, when signing secrets exist)
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$UPLOAD_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$UPLOAD_KEYSTORE_BASE64" | base64 -d > my-upload-key.jks
+            gradle assembleRelease --no-daemon
+          else
+            echo "Skipping Release APK build (optional signing secrets not configured)."
+          fi
+
+      - name: Prepare downloadable APK files
+        run: |
+          mkdir -p release-assets
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -z "$DEBUG_APK" ]; then
+            echo "Debug APK not found!"
+            exit 1
+          fi
+          cp "$DEBUG_APK" release-assets/Fluent11Launcher-debug.apk
+
+          if [ -d app/build/outputs/apk/release ]; then
+            RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1 || true)
+            if [ -n "$RELEASE_APK" ]; then
+              cp "$RELEASE_APK" release-assets/Fluent11Launcher-release.apk
+            fi
+          fi
+          ls -lh release-assets/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fluent11Launcher-APK
+          path: release-assets/*.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && format('Fluent 11 Launcher {0}', github.ref_name) || 'Fluent 11 Launcher (Latest Build)' }}
+          body: |
+            Compilação automática do **Fluent 11 Launcher** via GitHub Actions.
+
+            ### Como instalar no Android
+            1. Baixe o arquivo **`Fluent11Launcher-debug.apk`** abaixo (em *Assets*).
+            2. Abra o arquivo no seu dispositivo Android e permita a instalação de fontes desconhecidas se solicitado.
+          files: release-assets/*.apk
+          make_latest: true

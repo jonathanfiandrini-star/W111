@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.ScreenLockLandscape
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.Tune
@@ -80,6 +81,8 @@ fun BoxScope.LauncherSettingsWindow(
     windowState: DesktopWindowState,
     preferences: LauncherPreferences,
     canWriteSystemSettings: Boolean,
+    canDrawOverlays: Boolean,
+    isDefaultLauncher: Boolean,
     isActive: Boolean,
     onFocus: () -> Unit,
     onMinimize: () -> Unit,
@@ -93,7 +96,9 @@ fun BoxScope.LauncherSettingsWindow(
     onSelectDefaultWindowMode: (WindowSizeMode) -> Unit,
     onToggleForceLandscapeApps: (Boolean) -> Unit,
     onToggleFreeformBounds: (Boolean) -> Unit,
+    onToggleKeepTaskbarOverApps: (Boolean) -> Unit,
     onRequestWriteSettingsPermission: () -> Unit,
+    onRequestOverlayPermission: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
     onOpenDefaultHomeSettings: () -> Unit
 ) {
@@ -330,6 +335,89 @@ fun BoxScope.LauncherSettingsWindow(
                         )
                     }
 
+                    Surface(
+                        onClick = onRequestOverlayPermission,
+                        color = if (canDrawOverlays) Win11AccentCyan.copy(alpha = 0.14f) else Win11NavyBg,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                1.dp,
+                                if (canDrawOverlays) Win11AccentCyan else Win11BorderSubtle,
+                                RoundedCornerShape(8.dp)
+                            )
+                            .testTag("settings_grant_overlay_btn")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Layers,
+                                    contentDescription = null,
+                                    tint = Win11AccentCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Barra flutuante sobre apps nativos",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Win11TextPrimary
+                                    )
+                                    Text(
+                                        text = if (canDrawOverlays) {
+                                            "Permissão ativa: exibe [—] [□] [✕] no topo ao abrir apps"
+                                        } else {
+                                            "Conceda \"Exibir sobre outros apps\" para mostrar a barra de janela"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Win11TextSecondary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (canDrawOverlays) "Ativa" else "Permitir",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Win11AccentCyan
+                            )
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Manter Barra de Tarefas sobre apps",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Win11TextPrimary
+                            )
+                            Text(
+                                text = "Mantém a barra inferior com Iniciar, apps e relógio visível com apps abertos",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Win11TextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = preferences.keepTaskbarOverApps,
+                            onCheckedChange = onToggleKeepTaskbarOverApps,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Win11NavyBg,
+                                checkedTrackColor = Win11AccentCyan
+                            ),
+                            modifier = Modifier.testTag("settings_keep_taskbar_switch")
+                        )
+                    }
+
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -340,10 +428,14 @@ fun BoxScope.LauncherSettingsWindow(
                         }
                         Surface(
                             onClick = onOpenDefaultHomeSettings,
-                            color = Win11NavyBg,
+                            color = if (isDefaultLauncher) Win11AccentCyan.copy(alpha = 0.16f) else Win11NavyBg,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
-                                .border(1.dp, Win11BorderSubtle, RoundedCornerShape(8.dp))
+                                .border(
+                                    1.dp,
+                                    if (isDefaultLauncher) Win11AccentCyan else Win11BorderSubtle,
+                                    RoundedCornerShape(8.dp)
+                                )
                                 .testTag("settings_default_home_btn")
                         ) {
                             Row(
@@ -358,7 +450,7 @@ fun BoxScope.LauncherSettingsWindow(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Launcher Padrão",
+                                    text = if (isDefaultLauncher) "Launcher Padrão ✓" else "Definir como Padrão",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Win11TextPrimary
                                 )

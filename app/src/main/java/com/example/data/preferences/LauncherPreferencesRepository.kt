@@ -28,6 +28,7 @@ class LauncherPreferencesRepository(private val context: Context) {
         val FORCE_LANDSCAPE_APPS = booleanPreferencesKey("force_landscape_apps")
         val USE_FREEFORM_BOUNDS = booleanPreferencesKey("use_freeform_bounds")
         val DEFAULT_WINDOW_MODE = stringPreferencesKey("default_window_mode")
+        val KEEP_TASKBAR_OVER_APPS = booleanPreferencesKey("keep_taskbar_over_apps")
     }
 
     val preferencesFlow: Flow<LauncherPreferences> = context.launcherDataStore.data.map { prefs ->
@@ -41,7 +42,8 @@ class LauncherPreferencesRepository(private val context: Context) {
             useFreeformLaunchBounds = prefs[Keys.USE_FREEFORM_BOUNDS] ?: false,
             defaultWindowMode = WindowSizeMode.fromKey(
                 prefs[Keys.DEFAULT_WINDOW_MODE] ?: WindowSizeMode.MAXIMIZED.key
-            )
+            ),
+            keepTaskbarOverApps = prefs[Keys.KEEP_TASKBAR_OVER_APPS] ?: true
         )
     }
 
@@ -90,6 +92,12 @@ class LauncherPreferencesRepository(private val context: Context) {
     suspend fun setDefaultWindowMode(mode: WindowSizeMode) {
         context.launcherDataStore.edit { prefs ->
             prefs[Keys.DEFAULT_WINDOW_MODE] = mode.key
+        }
+    }
+
+    suspend fun setKeepTaskbarOverApps(enabled: Boolean) {
+        context.launcherDataStore.edit { prefs ->
+            prefs[Keys.KEEP_TASKBAR_OVER_APPS] = enabled
         }
     }
 }

@@ -2,6 +2,7 @@ package com.example.data.system
 
 import android.app.ActivityManager
 import android.app.ActivityOptions
+import android.app.role.RoleManager
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
@@ -121,11 +122,54 @@ class SystemBridge(private val context: Context) {
 
     fun canWriteSystemSettings(): Boolean = Settings.System.canWrite(context)
 
+    fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(context)
+
+    fun isDefaultLauncher(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = context.getSystemService(RoleManager::class.java)
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                return roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+            }
+        }
+        val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.resolveActivity(
+                homeIntent,
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+        return resolved?.activityInfo?.packageName == context.packageName
+    }
+
+    fun createDefaultLauncherPromptIntent(): Intent? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = context.getSystemService(RoleManager::class.java)
+            if (roleManager != null &&
+                roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+                !roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+            ) {
+                return roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+            }
+        }
+        return null
+    }
+
     fun openWriteSettingsPermission() {
         val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
             data = Uri.parse("package:${context.packageName}")
         }
         startSettingsIntent(intent, Settings.ACTION_SETTINGS)
+    }
+
+    fun openOverlayPermissionSettings() {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        )
+        startSettingsIntent(intent, Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
     }
 
     fun openDeveloperSettings() {
@@ -178,7 +222,8 @@ class SystemBridge(private val context: Context) {
         packageName: String,
         forceLandscape: Boolean = true,
         useFreeformBounds: Boolean = false,
-        windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED
+        windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
+        reserveBottomTaskbarPx: Int = 0
     ): Boolean {
         return try {
             val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
@@ -197,28 +242,25 @@ class SystemBridge(private val context: Context) {
                 val metrics = context.resources.displayMetrics
                 val longSide = maxOf(metrics.widthPixels, metrics.heightPixels)
                 val shortSide = minOf(metrics.widthPixels, metrics.heightPixels)
+                val usableHeight = (shortSide - reserveBottomTaskbarPx).coerceAtLeast(300)
                 val rect = when (windowSizeMode) {
                     WindowSizeMode.COMPACT -> {
                         val w = (longSide * 0.64f).toInt().coerceAtLeast(520)
-                        val h = (shortSide * 0.74f).toInt().coerceAtLeast(320)
+                        val h = (usableHeight * 0.78f).toInt().coerceAtLeast(300)
                         val l = ((longSide - w) / 2).coerceAtLeast(0)
-                        val t = ((shortSide - h) / 2).coerceAtLeast(0)
+                        val t = ((usableHeight - h) / 2).coerceAtLeast(0)
                         Rect(l, t, l + w, t + h)
                     }
                     WindowSizeMode.SPLIT_LEFT -> {
                         val halfW = (longSide / 2).coerceAtLeast(360)
-                        Rect(0, 0, halfW, shortSide)
+                        Rect(0, 0, halfW, usableHeight)
                     }
                     WindowSizeMode.SPLIT_RIGHT -> {
                         val halfW = (longSide / 2).coerceAtLeast(360)
-                        Rect(halfW, 0, longSide, shortSide)
+                        Rect(halfW, 0, longSide, usableHeight)
                     }
                     WindowSizeMode.MAXIMIZED -> {
-                        val w = (longSide * 0.94f).toInt().coerceAtLeast(640)
-                        val h = (shortSide * 0.90f).toInt().coerceAtLeast(360)
-                        val l = ((longSide - w) / 2).coerceAtLeast(0)
-                        val t = ((shortSide - h) / 2).coerceAtLeast(0)
-                        Rect(l, t, l + w, t + h)
+                        Rect(0, 0, longSide, usableHeight)
                     }
                 }
                 val options = ActivityOptions.makeBasic().apply {
@@ -386,7 +428,9 @@ class SystemBridge(private val context: Context) {
             storageUsedGb = usedStorageGb,
             storageTotalGb = totalStorageGb,
             canWriteSystemSettings = canWriteSettings,
-            isRotationLockedLandscape = isLandscapeLocked
+            isRotationLockedLandscape = isLandscapeLocked,
+            isDefaultLauncher = isDefaultLauncher(),
+            canDrawOverlays = canDrawOverlays()
         )
     }
 }

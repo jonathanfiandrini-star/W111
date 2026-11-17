@@ -8,4 +8,7 @@
     <string name="cd_close_window">Fechar janela</string>
     <string name="cd_add_note">Nova nota rápida</string>
     <string name="cd_refresh_weather">Atualizar clima</string>
+    <string name="overlay_notif_channel_name">Controles de Janela</string>
+    <string name="overlay_notif_title">Barra de janela ativa</string>
+    <string name="overlay_notif_body">Minimizar, redimensionar ou fechar o aplicativo aberto.</string>
 </resources>

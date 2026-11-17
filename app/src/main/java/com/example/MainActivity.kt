@@ -1,11 +1,17 @@
 package com.example
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import com.example.data.ai.configureAppCheck
+import com.example.data.model.StickyNoteColor
+import com.example.service.AppWindowOverlayService
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -47,6 +53,7 @@ import com.example.ui.LauncherUiState
 import com.example.ui.LauncherViewModel
 import com.example.ui.components.ActionCenterFlyout
 import com.example.ui.components.AddAppPickerDialog
+import com.example.ui.components.CopilotFlyout
 import com.example.ui.components.DesktopContextMenuDialog
 import com.example.ui.components.DesktopGridArea
 import com.example.ui.components.FloatingFolderWindow
@@ -71,10 +78,38 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Configure Firebase App Check with launch intent before any UI or ViewModel creation
+        configureAppCheck(this, intent)
+
         enableEdgeToEdge()
+        handleOverlayActionIntent(intent)
         setContent {
             Fluent11Theme {
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                val copilotState by viewModel.copilotUiState.collectAsStateWithLifecycle()
+
+                val defaultLauncherPromptLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) {
+                    viewModel.onDefaultLauncherRoleResult()
+                }
+
+                val triggerDefaultLauncherFlow: () -> Unit = {
+                    val promptIntent = viewModel.getDefaultLauncherPromptIntent()
+                    if (promptIntent != null) {
+                        defaultLauncherPromptLauncher.launch(promptIntent)
+                    } else {
+                        viewModel.openDefaultHomeSettings()
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    val startupIntent = viewModel.consumeStartupDefaultLauncherIntent()
+                    if (startupIntent != null) {
+                        runCatching { defaultLauncherPromptLauncher.launch(startupIntent) }
+                    }
+                }
 
                 LaunchedEffect(uiState.telemetry.windowBrightness) {
                     val lp = window.attributes
@@ -84,8 +119,48 @@ class MainActivity : ComponentActivity() {
 
                 Fluent11LauncherScreen(
                     uiState = uiState,
-                    viewModel = viewModel
+                    copilotState = copilotState,
+                    viewModel = viewModel,
+                    onRequestDefaultLauncher = triggerDefaultLauncherFlow
                 )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleOverlayActionIntent(intent)
+    }
+
+    private fun handleOverlayActionIntent(intent: Intent?) {
+        val pkg = intent?.getStringExtra(AppWindowOverlayService.EXTRA_PACKAGE_NAME).orEmpty()
+        when (intent?.action) {
+            AppWindowOverlayService.ACTION_MINIMIZE_EXTERNAL_APP -> {
+                viewModel.handleExternalWindowMinimize(pkg)
+            }
+            AppWindowOverlayService.ACTION_CLOSE_EXTERNAL_APP -> {
+                viewModel.handleExternalWindowClose(pkg)
+            }
+            AppWindowOverlayService.ACTION_OPEN_DESKTOP_OVERLAY -> {
+                val target = intent.getStringExtra(AppWindowOverlayService.EXTRA_OVERLAY_TARGET)
+                val overlay = when (target) {
+                    AppWindowOverlayService.OVERLAY_TARGET_START -> ActiveOverlay.StartMenu
+                    AppWindowOverlayService.OVERLAY_TARGET_SEARCH -> ActiveOverlay.Search
+                    AppWindowOverlayService.OVERLAY_TARGET_WIDGETS -> ActiveOverlay.Widgets
+                    AppWindowOverlayService.OVERLAY_TARGET_ACTION_CENTER -> ActiveOverlay.ActionCenter
+                    AppWindowOverlayService.OVERLAY_TARGET_COPILOT -> ActiveOverlay.Copilot
+                    else -> ActiveOverlay.None
+                }
+                if (overlay != ActiveOverlay.None) {
+                    viewModel.toggleOverlay(overlay)
+                }
+            }
+            AppWindowOverlayService.ACTION_FOCUS_INTERNAL_WINDOW -> {
+                val winId = intent.getStringExtra(AppWindowOverlayService.EXTRA_WINDOW_ID).orEmpty()
+                if (winId.isNotBlank()) {
+                    viewModel.focusWindow(winId)
+                }
             }
         }
     }
@@ -99,7 +174,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Fluent11LauncherScreen(
     uiState: LauncherUiState,
-    viewModel: LauncherViewModel
+    copilotState: com.example.data.model.CopilotUiState,
+    viewModel: LauncherViewModel,
+    onRequestDefaultLauncher: () -> Unit
 ) {
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var renameTargetItem by remember { mutableStateOf<DesktopItemEntity?>(null) }
@@ -217,6 +294,8 @@ fun Fluent11LauncherScreen(
                                     windowState = win,
                                     preferences = uiState.preferences,
                                     canWriteSystemSettings = uiState.telemetry.canWriteSystemSettings,
+                                    canDrawOverlays = uiState.telemetry.canDrawOverlays,
+                                    isDefaultLauncher = uiState.telemetry.isDefaultLauncher,
                                     isActive = isActive,
                                     onFocus = { viewModel.focusWindow(win.windowId) },
                                     onMinimize = { viewModel.minimizeWindow(win.windowId) },
@@ -230,9 +309,11 @@ fun Fluent11LauncherScreen(
                                     onSelectDefaultWindowMode = { viewModel.setDefaultWindowMode(it) },
                                     onToggleForceLandscapeApps = { viewModel.setForceLandscapeApps(it) },
                                     onToggleFreeformBounds = { viewModel.setUseFreeformLaunchBounds(it) },
+                                    onToggleKeepTaskbarOverApps = { viewModel.setKeepTaskbarOverApps(it) },
                                     onRequestWriteSettingsPermission = { viewModel.openWriteSettingsPermission() },
+                                    onRequestOverlayPermission = { viewModel.openOverlayPermissionSettings() },
                                     onOpenDeveloperSettings = { viewModel.openDeveloperSettings() },
-                                    onOpenDefaultHomeSettings = { viewModel.openDefaultHomeSettings() }
+                                    onOpenDefaultHomeSettings = onRequestDefaultLauncher
                                 )
                             }
                             DesktopWindowKind.INTERNAL_NOTES -> {
@@ -333,7 +414,34 @@ fun Fluent11LauncherScreen(
                         onQueryChange = { viewModel.updateSearchQuery(it) },
                         onLaunchApp = { viewModel.launchApp(it) },
                         onOpenFolder = { folderId -> viewModel.openFolderWindow(folderId) },
-                        onOpenWidgets = { viewModel.toggleOverlay(ActiveOverlay.Widgets) }
+                        onOpenWidgets = { viewModel.toggleOverlay(ActiveOverlay.Widgets) },
+                        onAskCopilot = { query -> viewModel.askCopilotFromSearch(query) }
+                    )
+                }
+
+                // Right-side Copilot AI Flyout (Firebase AI Logic)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = uiState.activeOverlay is ActiveOverlay.Copilot,
+                    enter = slideInHorizontally(
+                        initialOffsetX = { it / 2 },
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    ) + fadeIn(),
+                    exit = slideOutHorizontally(targetOffsetX = { it / 2 }) + fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 10.dp, top = 8.dp)
+                ) {
+                    CopilotFlyout(
+                        copilotState = copilotState,
+                        onSendPrompt = { viewModel.sendCopilotPrompt(it) },
+                        onClearChat = { viewModel.clearCopilotChat() },
+                        onSaveToNotes = { text ->
+                            viewModel.addStickyNote(text, StickyNoteColor.BLUE)
+                            viewModel.showBanner("Resposta salva nas Notas Rápidas")
+                        },
+                        onCopiedNotice = {
+                            viewModel.showBanner("Texto copiado para a área de transferência")
+                        }
                     )
                 }
 
@@ -357,7 +465,8 @@ fun Fluent11LauncherScreen(
                         onToggleTorch = { viewModel.toggleTorch() },
                         onToggleMute = { viewModel.toggleMuteMedia() },
                         onOpenNetwork = { viewModel.openNetworkSettings() },
-                        onOpenDefaultHome = { viewModel.openDefaultHomeSettings() },
+                        onOpenDefaultHome = onRequestDefaultLauncher,
+                        onOpenOverlayPermission = { viewModel.openOverlayPermissionSettings() },
                         onToggleLandscapeLock = { viewModel.toggleLandscapeLockAction() },
                         onBrightnessChange = { viewModel.setWindowBrightness(it) },
                         onVolumeChange = { viewModel.setMediaVolume(it) },
@@ -430,6 +539,7 @@ fun Fluent11LauncherScreen(
                 currentTimeMillis = uiState.currentTimeMillis,
                 onToggleStart = { viewModel.toggleOverlay(ActiveOverlay.StartMenu) },
                 onToggleSearch = { viewModel.toggleOverlay(ActiveOverlay.Search) },
+                onToggleCopilot = { viewModel.toggleOverlay(ActiveOverlay.Copilot) },
                 onToggleWidgets = { viewModel.toggleOverlay(ActiveOverlay.Widgets) },
                 onToggleActionCenter = { viewModel.toggleOverlay(ActiveOverlay.ActionCenter) },
                 onOpenDesktopMenu = { viewModel.setDesktopContextMenuVisible(true) },
@@ -452,7 +562,7 @@ fun Fluent11LauncherScreen(
                 viewModel.showBanner("Lista de aplicativos atualizada")
             },
             onOpenSettings = { viewModel.openSettingsWindow() },
-            onSetDefaultLauncher = { viewModel.openDefaultHomeSettings() }
+            onSetDefaultLauncher = onRequestDefaultLauncher
         )
     }
 

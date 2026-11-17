@@ -190,6 +190,7 @@ class LauncherRepository(
     suspend fun setForceLandscapeApps(enabled: Boolean) = prefsRepo.setForceLandscapeApps(enabled)
     suspend fun setUseFreeformLaunchBounds(enabled: Boolean) = prefsRepo.setUseFreeformLaunchBounds(enabled)
     suspend fun setDefaultWindowMode(mode: WindowSizeMode) = prefsRepo.setDefaultWindowMode(mode)
+    suspend fun setKeepTaskbarOverApps(enabled: Boolean) = prefsRepo.setKeepTaskbarOverApps(enabled)
 
     suspend fun fetchWeather(cityQuery: String): WeatherState = withContext(Dispatchers.IO) {
         try {
@@ -231,11 +232,22 @@ class LauncherRepository(
         packageName: String,
         forceLandscape: Boolean = true,
         useFreeformBounds: Boolean = false,
-        windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED
-    ): Boolean = systemBridge.launchApp(packageName, forceLandscape, useFreeformBounds, windowSizeMode)
+        windowSizeMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
+        reserveBottomTaskbarPx: Int = 0
+    ): Boolean = systemBridge.launchApp(
+        packageName = packageName,
+        forceLandscape = forceLandscape,
+        useFreeformBounds = useFreeformBounds,
+        windowSizeMode = windowSizeMode,
+        reserveBottomTaskbarPx = reserveBottomTaskbarPx
+    )
 
     fun canWriteSystemSettings(): Boolean = systemBridge.canWriteSystemSettings()
+    fun canDrawOverlays(): Boolean = systemBridge.canDrawOverlays()
+    fun isDefaultLauncher(): Boolean = systemBridge.isDefaultLauncher()
+    fun createDefaultLauncherPromptIntent() = systemBridge.createDefaultLauncherPromptIntent()
     fun openWriteSettingsPermission() = systemBridge.openWriteSettingsPermission()
+    fun openOverlayPermissionSettings() = systemBridge.openOverlayPermissionSettings()
     fun openDeveloperSettings() = systemBridge.openDeveloperSettings()
     fun enforceLandscapeRotation(): Boolean = systemBridge.enforceLandscapeRotation()
     fun openAppInfo(packageName: String) = systemBridge.openAppInfo(packageName)

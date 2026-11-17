@@ -99,6 +99,7 @@ fun Taskbar(
     currentTimeMillis: Long,
     onToggleStart: () -> Unit,
     onToggleSearch: () -> Unit,
+    onToggleCopilot: () -> Unit,
     onToggleWidgets: () -> Unit,
     onToggleActionCenter: () -> Unit,
     onOpenDesktopMenu: () -> Unit,
@@ -182,6 +183,14 @@ fun Taskbar(
                             tint = Win11TextPrimary,
                             modifier = Modifier.size(22.dp)
                         )
+                    }
+
+                    TaskbarIconButton(
+                        isActive = activeOverlay is ActiveOverlay.Copilot,
+                        onClick = onToggleCopilot,
+                        testTag = "taskbar_copilot_button"
+                    ) {
+                        CopilotRingIcon(modifier = Modifier.size(21.dp))
                     }
 
                     TaskbarIconButton(

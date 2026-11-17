@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Search
@@ -64,6 +65,7 @@ fun SearchFlyout(
     onLaunchApp: (String) -> Unit,
     onOpenFolder: (Long) -> Unit,
     onOpenWidgets: () -> Unit,
+    onAskCopilot: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -149,7 +151,37 @@ fun SearchFlyout(
                     .testTag("search_input_field")
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Win11CardSurface)
+                    .border(1.dp, Win11AccentCyan.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    .clickable { onAskCopilot(trimmedQuery) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("search_ask_copilot_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = Win11AccentCyan,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = if (trimmedQuery.isEmpty()) "Perguntar ao Copilot IA (Gemini)"
+                    else "Perguntar \"$trimmedQuery\" ao Copilot IA",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Win11TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 8.dp),

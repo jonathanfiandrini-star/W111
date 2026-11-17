@@ -87,7 +87,8 @@ data class LauncherPreferences(
     val hasSeededDefaults: Boolean = false,
     val forceLandscapeApps: Boolean = true,
     val useFreeformLaunchBounds: Boolean = false,
-    val defaultWindowMode: WindowSizeMode = WindowSizeMode.MAXIMIZED
+    val defaultWindowMode: WindowSizeMode = WindowSizeMode.MAXIMIZED,
+    val keepTaskbarOverApps: Boolean = true
 )
 
 data class SystemTelemetry(
@@ -105,7 +106,9 @@ data class SystemTelemetry(
     val storageUsedGb: Float = 0f,
     val storageTotalGb: Float = 0f,
     val canWriteSystemSettings: Boolean = false,
-    val isRotationLockedLandscape: Boolean = false
+    val isRotationLockedLandscape: Boolean = false,
+    val isDefaultLauncher: Boolean = false,
+    val canDrawOverlays: Boolean = false
 )
 
 sealed interface WeatherState {
@@ -129,5 +132,19 @@ sealed interface ActiveOverlay {
     data object Search : ActiveOverlay
     data object Widgets : ActiveOverlay
     data object ActionCenter : ActiveOverlay
+    data object Copilot : ActiveOverlay
     data class AddAppPicker(val targetFolderId: Long? = null) : ActiveOverlay
 }
+
+data class CopilotChatMessage(
+    val id: String,
+    val isUser: Boolean,
+    val text: String,
+    val isStreaming: Boolean = false
+)
+
+data class CopilotUiState(
+    val messages: List<CopilotChatMessage> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null
+)
