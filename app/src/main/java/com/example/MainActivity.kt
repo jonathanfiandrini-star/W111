@@ -19,10 +19,12 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -84,6 +86,7 @@ import com.example.ui.components.OverlayPermissionPromptDialog
 import com.example.ui.components.SearchFlyout
 import com.example.ui.components.StartMenuFlyout
 import com.example.ui.components.Taskbar
+import com.example.ui.components.MinimizedTaskbarRestorePill
 import com.example.ui.components.TaskbarWindowControlPopover
 import com.example.ui.components.TextInputDialog
 import com.example.ui.components.WallpaperBackground
@@ -644,28 +647,56 @@ fun Fluent11LauncherScreen(
                 }
             }
 
-            // Bottom Windows 11 Centered Taskbar
+            // Bottom Windows 11 Centered Taskbar (collapsible)
             val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
-            Taskbar(
-                activeOverlay = uiState.activeOverlay,
-                pinnedApps = uiState.taskbarPinnedApps,
-                openWindows = uiState.openWindows,
-                activeWindowId = uiState.activeWindowId,
-                appsByPackage = uiState.installedAppsByPackage,
-                telemetry = uiState.telemetry,
-                weatherState = uiState.weatherState,
-                currentTimeMillis = uiState.currentTimeMillis,
-                anchorAtBottomEdge = uiState.preferences.anchorTaskbarAtBottomEdge,
-                onBackClick = { activity?.onBackPressedDispatcher?.onBackPressed() },
-                onToggleStart = { viewModel.toggleOverlay(ActiveOverlay.StartMenu) },
-                onToggleSearch = { viewModel.toggleOverlay(ActiveOverlay.Search) },
-                onToggleCopilot = { viewModel.toggleOverlay(ActiveOverlay.Copilot) },
-                onToggleWidgets = { viewModel.toggleOverlay(ActiveOverlay.Widgets) },
-                onToggleActionCenter = { viewModel.toggleOverlay(ActiveOverlay.ActionCenter) },
-                onOpenDesktopMenu = { viewModel.setDesktopContextMenuVisible(true) },
-                onLaunchPinnedApp = { viewModel.launchApp(it) },
-                onWindowClick = { winId -> viewModel.onTaskbarWindowClick(winId) },
-                onWindowLongClick = { winId -> viewModel.toggleTaskbarWindowPopover(winId) }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !uiState.isDesktopTaskbarMinimized,
+                enter = expandVertically(
+                    expandFrom = Alignment.Bottom,
+                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                ) + fadeIn(tween(180)),
+                exit = shrinkVertically(
+                    shrinkTowards = Alignment.Bottom,
+                    animationSpec = tween(190, easing = FastOutSlowInEasing)
+                ) + fadeOut(tween(150))
+            ) {
+                Taskbar(
+                    activeOverlay = uiState.activeOverlay,
+                    pinnedApps = uiState.taskbarPinnedApps,
+                    openWindows = uiState.openWindows,
+                    activeWindowId = uiState.activeWindowId,
+                    appsByPackage = uiState.installedAppsByPackage,
+                    telemetry = uiState.telemetry,
+                    weatherState = uiState.weatherState,
+                    currentTimeMillis = uiState.currentTimeMillis,
+                    anchorAtBottomEdge = uiState.preferences.anchorTaskbarAtBottomEdge,
+                    onBackClick = { activity?.onBackPressedDispatcher?.onBackPressed() },
+                    onToggleStart = { viewModel.toggleOverlay(ActiveOverlay.StartMenu) },
+                    onToggleSearch = { viewModel.toggleOverlay(ActiveOverlay.Search) },
+                    onToggleCopilot = { viewModel.toggleOverlay(ActiveOverlay.Copilot) },
+                    onToggleWidgets = { viewModel.toggleOverlay(ActiveOverlay.Widgets) },
+                    onToggleActionCenter = { viewModel.toggleOverlay(ActiveOverlay.ActionCenter) },
+                    onOpenDesktopMenu = { viewModel.setDesktopContextMenuVisible(true) },
+                    onLaunchPinnedApp = { viewModel.launchApp(it) },
+                    onWindowClick = { winId -> viewModel.onTaskbarWindowClick(winId) },
+                    onWindowLongClick = { winId -> viewModel.toggleTaskbarWindowPopover(winId) },
+                    onMinimizeTaskbar = { viewModel.setDesktopTaskbarMinimized(true) }
+                )
+            }
+        }
+
+        // Discreet floating restore pill when Desktop Taskbar is minimized
+        androidx.compose.animation.AnimatedVisibility(
+            visible = uiState.isDesktopTaskbarMinimized,
+            enter = fadeIn(tween(200)) + scaleIn(initialScale = 0.88f, animationSpec = tween(200)),
+            exit = fadeOut(tween(150)) + scaleOut(targetScale = 0.88f, animationSpec = tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 12.dp, bottom = 10.dp)
+        ) {
+            MinimizedTaskbarRestorePill(
+                onRestore = { viewModel.setDesktopTaskbarMinimized(false) },
+                anchorAtBottomEdge = uiState.preferences.anchorTaskbarAtBottomEdge
             )
         }
     }

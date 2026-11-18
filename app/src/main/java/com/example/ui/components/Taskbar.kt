@@ -38,6 +38,8 @@ import androidx.compose.material.icons.rounded.CropSquare
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.HorizontalRule
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.StickyNote2
 import androidx.compose.material.icons.rounded.Tune
@@ -113,6 +115,7 @@ fun Taskbar(
     onLaunchPinnedApp: (String) -> Unit,
     onWindowClick: (String) -> Unit,
     onWindowLongClick: (String) -> Unit,
+    onMinimizeTaskbar: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -287,6 +290,8 @@ fun Taskbar(
                     dateText = dateFormatter.format(dateObj),
                     onClick = onToggleWidgets
                 )
+
+                TaskbarMinimizeButton(onClick = onMinimizeTaskbar)
             }
         }
     }
@@ -721,6 +726,69 @@ private fun ClockTrayButton(
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
             color = Win11TextSecondary
         )
+    }
+}
+
+@Composable
+private fun TaskbarMinimizeButton(onClick: () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .size(width = 36.dp, height = 40.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .clickable(onClick = onClick)
+            .testTag("taskbar_minimize_button")
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.KeyboardArrowDown,
+            contentDescription = "Minimizar barra inferior",
+            tint = Win11TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+fun MinimizedTaskbarRestorePill(
+    onRestore: () -> Unit,
+    anchorAtBottomEdge: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val baseModifier = if (anchorAtBottomEdge) {
+        modifier
+    } else {
+        modifier.windowInsetsPadding(WindowInsets.navigationBars)
+    }
+    Surface(
+        onClick = onRestore,
+        color = Win11MicaSurface.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 8.dp,
+        shadowElevation = 12.dp,
+        modifier = baseModifier
+            .minimumInteractiveComponentSize()
+            .border(1.dp, Win11BorderHighlight, RoundedCornerShape(20.dp))
+            .testTag("desktop_restore_taskbar_pill")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowUp,
+                contentDescription = "Restaurar barra de tarefas",
+                tint = Win11AccentCyan,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = "Barra",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = Win11TextPrimary
+            )
+        }
     }
 }
 

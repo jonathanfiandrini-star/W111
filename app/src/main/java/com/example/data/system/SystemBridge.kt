@@ -299,7 +299,7 @@ class SystemBridge(private val context: Context) {
                 }
                 val (screenW, screenH, topInsetPx, navBottomPx) = readScreenFrameMetrics()
                 val density = context.resources.displayMetrics.density
-                val topBound = maxOf(reserveTopBarPx, topInsetPx)
+                val topBound = topInsetPx + reserveTopBarPx
                 val navAllowance = if (anchorTaskbarAtBottomEdge) 0 else navBottomPx
                 val bottomClearance = (4f * density).toInt().coerceAtLeast(2)
                 val bottomReserved = reserveBottomTaskbarPx + navAllowance + bottomClearance

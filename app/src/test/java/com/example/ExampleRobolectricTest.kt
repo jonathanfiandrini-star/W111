@@ -237,4 +237,21 @@ class ExampleRobolectricTest {
             .performScrollTo()
             .assertIsDisplayed()
     }
+
+    @Test
+    fun `taskbar minimizes into discreet restore pill and restores on tap`() {
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("taskbar_minimize_button")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("desktop_restore_taskbar_pill")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("taskbar_start_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("taskbar_minimize_button").assertIsDisplayed()
+    }
 }

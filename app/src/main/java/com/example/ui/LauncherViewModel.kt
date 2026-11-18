@@ -72,7 +72,8 @@ data class LauncherUiState(
     val taskbarPopoverWindowId: String? = null,
     val pendingOverlayPermissionLaunch: PendingAppLaunch? = null,
     val showGestureGuideDialog: Boolean = false,
-    val showFreeformGuideDialog: Boolean = false
+    val showFreeformGuideDialog: Boolean = false,
+    val isDesktopTaskbarMinimized: Boolean = false
 )
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -98,6 +99,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val pendingOverlayPermissionLaunchFlow = MutableStateFlow<PendingAppLaunch?>(null)
     private val showGestureGuideDialogFlow = MutableStateFlow(false)
     private val showFreeformGuideDialogFlow = MutableStateFlow(false)
+    private val desktopTaskbarMinimizedFlow = MutableStateFlow(false)
     private var pendingPermissionReturnLaunch: PendingAppLaunch? = null
     private var lastExternalLaunchAtMs: Long = 0L
     private var hasPromptedDefaultLauncherThisSession = false
@@ -132,7 +134,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val contextMenu: Boolean,
         val pendingLaunch: PendingAppLaunch?,
         val showGestureGuide: Boolean,
-        val showFreeformGuide: Boolean
+        val showFreeformGuide: Boolean,
+        val isDesktopTaskbarMinimized: Boolean
     )
 
     private val coreStreamsFlow = combine(
@@ -164,7 +167,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         desktopContextMenuFlow,
         pendingOverlayPermissionLaunchFlow,
         showGestureGuideDialogFlow,
-        showFreeformGuideDialogFlow
+        showFreeformGuideDialogFlow,
+        desktopTaskbarMinimizedFlow
     ) { arr ->
         @Suppress("UNCHECKED_CAST")
         WindowStreams(
@@ -176,7 +180,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             contextMenu = arr[5] as Boolean,
             pendingLaunch = arr[6] as PendingAppLaunch?,
             showGestureGuide = arr[7] as Boolean,
-            showFreeformGuide = arr[8] as Boolean
+            showFreeformGuide = arr[8] as Boolean,
+            isDesktopTaskbarMinimized = arr[9] as Boolean
         )
     }
 
@@ -217,7 +222,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             taskbarPopoverWindowId = win.popoverWindowId,
             pendingOverlayPermissionLaunch = win.pendingLaunch,
             showGestureGuideDialog = win.showGestureGuide,
-            showFreeformGuideDialog = win.showFreeformGuide
+            showFreeformGuideDialog = win.showFreeformGuide,
+            isDesktopTaskbarMinimized = win.isDesktopTaskbarMinimized
         )
     }.stateIn(
         scope = viewModelScope,
@@ -442,11 +448,24 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val current = activeOverlayFlow.value
         val next = if (current == overlay) ActiveOverlay.None else overlay
         activeOverlayFlow.value = next
+        if (next != ActiveOverlay.None) {
+            desktopTaskbarMinimizedFlow.value = false
+        }
         if (next != ActiveOverlay.Search) {
             searchQueryFlow.value = ""
         }
         if (next == ActiveOverlay.ActionCenter || next == ActiveOverlay.Widgets) {
             refreshTelemetry()
+        }
+    }
+
+    fun setDesktopTaskbarMinimized(minimized: Boolean) {
+        desktopTaskbarMinimizedFlow.value = minimized
+        if (minimized) {
+            activeOverlayFlow.value = ActiveOverlay.None
+            desktopContextMenuFlow.value = false
+            taskbarPopoverWindowIdFlow.value = null
+            searchQueryFlow.value = ""
         }
     }
 
@@ -645,7 +664,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             0
         }
         val reserveTopBarPx = if (hasOverlayPermission) {
-            (40f * density).roundToInt()
+            (46f * density).roundToInt()
         } else {
             0
         }
