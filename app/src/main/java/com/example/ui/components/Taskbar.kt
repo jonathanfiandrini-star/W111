@@ -735,17 +735,18 @@ private fun TaskbarMinimizeButton(onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .minimumInteractiveComponentSize()
-            .size(width = 36.dp, height = 40.dp)
+            .size(width = 42.dp, height = 40.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.06f))
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(1.dp, Win11BorderSubtle, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .testTag("taskbar_minimize_button")
     ) {
         Icon(
             imageVector = Icons.Rounded.KeyboardArrowDown,
             contentDescription = "Minimizar barra inferior",
-            tint = Win11TextSecondary,
-            modifier = Modifier.size(20.dp)
+            tint = Win11TextPrimary,
+            modifier = Modifier.size(22.dp)
         )
     }
 }

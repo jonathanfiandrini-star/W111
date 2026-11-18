@@ -37,6 +37,7 @@ import com.example.data.system.TaskbarOverlayEntry
 import com.example.data.system.TaskbarOverlaySnapshot
 import com.example.service.AppWindowOverlayService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -45,8 +46,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
 
@@ -227,7 +230,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,
         initialValue = LauncherUiState()
     )
 
@@ -291,7 +294,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     anchorTaskbarAtBottomEdge = controls.prefs.anchorTaskbarAtBottomEdge,
                     useFreeformBounds = controls.prefs.useFreeformLaunchBounds
                 )
-            }.collect { snapshot ->
+            }.distinctUntilChanged().collect { snapshot ->
                 ExternalWindowOverlayBus.updateTaskbarSnapshot(snapshot)
             }
         }
@@ -303,6 +306,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 when (action) {
                     is ExternalWindowAction.Minimize -> handleExternalWindowMinimize(action.packageName)
                     is ExternalWindowAction.Resize -> {
+                        lastExternalLaunchAtMs = System.currentTimeMillis()
                         val winId = "app_${action.packageName}"
                         openWindowsFlow.value = openWindowsFlow.value.map {
                             if (it.windowId == winId) {
@@ -312,6 +316,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     }
                     is ExternalWindowAction.Close -> handleExternalWindowClose(action.packageName)
                     is ExternalWindowAction.SwitchToApp -> {
+                        lastExternalLaunchAtMs = System.currentTimeMillis()
                         val winId = "app_${action.packageName}"
                         val now = System.currentTimeMillis()
                         val prev = openWindowsFlow.value.map { win ->
@@ -349,8 +354,13 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             while (true) {
                 currentTimeFlow.value = System.currentTimeMillis()
-                telemetryFlow.value = repository.readTelemetry(windowBrightnessFlow.value)
-                delay(10_000L)
+                val nextTelemetry = withContext(Dispatchers.IO) {
+                    repository.readTelemetry(windowBrightnessFlow.value)
+                }
+                if (nextTelemetry != telemetryFlow.value) {
+                    telemetryFlow.value = nextTelemetry
+                }
+                delay(30_000L)
             }
         }
     }
@@ -370,19 +380,32 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun refreshInstalledApps(seedIfNeeded: Boolean = false) {
         viewModelScope.launch {
             val apps = repository.loadInstalledApps()
-            installedAppsFlow.value = apps
+            val prevKeys = installedAppsFlow.value.map { it.packageName to it.label }
+            val nextKeys = apps.map { it.packageName to it.label }
+            if (prevKeys != nextKeys) {
+                installedAppsFlow.value = apps
+            }
             if (seedIfNeeded) {
                 repository.ensureInitialSeed(apps)
             }
-            telemetryFlow.value = repository.readTelemetry(windowBrightnessFlow.value)
+            refreshTelemetry()
         }
     }
 
     fun refreshTelemetry() {
-        if (uiState.value.preferences.forceLandscapeApps && repository.canWriteSystemSettings()) {
-            repository.enforceLandscapeRotation()
+        viewModelScope.launch {
+            if (uiState.value.preferences.forceLandscapeApps && repository.canWriteSystemSettings()) {
+                withContext(Dispatchers.IO) {
+                    repository.enforceLandscapeRotation()
+                }
+            }
+            val updated = withContext(Dispatchers.IO) {
+                repository.readTelemetry(windowBrightnessFlow.value)
+            }
+            if (updated != telemetryFlow.value) {
+                telemetryFlow.value = updated
+            }
         }
-        telemetryFlow.value = repository.readTelemetry(windowBrightnessFlow.value)
     }
 
     fun onLauncherResumed() {
@@ -403,9 +426,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        // Guard against transient onResume events fired right as an external app is launching
+        // Guard against transient onResume events fired right as an external app is launching or switching
         val elapsedSinceLaunch = System.currentTimeMillis() - lastExternalLaunchAtMs
-        if (lastExternalLaunchAtMs > 0L && elapsedSinceLaunch in 0L..1500L) {
+        if (lastExternalLaunchAtMs > 0L && elapsedSinceLaunch in 0L..2500L) {
             refreshTelemetry()
             return
         }
@@ -414,14 +437,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         ExternalWindowOverlayBus.clearSession()
         // When returning from an external app, mark external app windows as minimized in the Taskbar
         val updated = openWindowsFlow.value.map { win ->
-            if (win.kind == DesktopWindowKind.EXTERNAL_APP) win.copy(isMinimized = true) else win
+            if (win.kind == DesktopWindowKind.EXTERNAL_APP && !win.isMinimized) win.copy(isMinimized = true) else win
         }
-        openWindowsFlow.value = updated
+        if (updated != openWindowsFlow.value) {
+            openWindowsFlow.value = updated
+        }
         if (activeWindowIdFlow.value?.startsWith("app_") == true) {
             activeWindowIdFlow.value = updated.lastOrNull { !it.isMinimized }?.windowId
         }
-        refreshInstalledApps(seedIfNeeded = false)
-        refreshTelemetry()
+        if (installedAppsFlow.value.isEmpty()) {
+            refreshInstalledApps(seedIfNeeded = false)
+        } else {
+            refreshTelemetry()
+        }
     }
 
     fun handleExternalWindowMinimize(packageName: String) {

@@ -95,6 +95,9 @@ fun DesktopGridArea(
     val folders = remember(rootItems) {
         rootItems.filter { it.type == DesktopItemType.FOLDER.name }
     }
+    val childrenByFolder = remember(allItems) {
+        allItems.filter { it.folderId != null }.groupBy { it.folderId!! }
+    }
 
     val appPages = remember(installedApps) {
         if (installedApps.isEmpty()) emptyList() else installedApps.chunked(24)
@@ -107,22 +110,22 @@ fun DesktopGridArea(
         HorizontalPager(
             state = pagerState,
             beyondViewportPageCount = 1,
+            key = { it },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = if (totalPages > 1) 34.dp else 0.dp)
                 .testTag("desktop_pager")
         ) { page ->
-            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
-            val depthScale = lerp(0.94f, 1f, (1f - pageOffset).coerceIn(0f, 1f))
-            val depthAlpha = lerp(0.58f, 1f, (1f - pageOffset).coerceIn(0f, 1f))
-
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                        val factor = (1f - pageOffset).coerceIn(0f, 1f)
+                        val depthScale = lerp(0.95f, 1f, factor)
                         scaleX = depthScale
                         scaleY = depthScale
-                        alpha = depthAlpha
+                        alpha = lerp(0.68f, 1f, factor)
                     }
             ) {
                 if (page == 0) {
@@ -189,9 +192,7 @@ fun DesktopGridArea(
                         ) {
                             items(rootItems, key = { it.id }) { item ->
                                 val isFolder = item.type == DesktopItemType.FOLDER.name
-                                val folderChildren = remember(allItems, item.id) {
-                                    if (isFolder) allItems.filter { it.folderId == item.id } else emptyList()
-                                }
+                                val folderChildren = if (isFolder) childrenByFolder[item.id].orEmpty() else emptyList()
                                 val app = item.packageName?.let { appsByPackage[it] }
 
                                 DesktopTile(

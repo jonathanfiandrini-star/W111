@@ -100,6 +100,7 @@ import com.example.ui.theme.Win11TextPrimary
 class MainActivity : ComponentActivity() {
 
     private val viewModel: LauncherViewModel by viewModels()
+    private var anchorBottomEdgePref: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,7 +109,7 @@ class MainActivity : ComponentActivity() {
         configureAppCheck(this, intent)
 
         enableEdgeToEdge()
-        applyImmersiveNavigation()
+        applyImmersiveNavigation(anchorBottomEdgePref)
         handleOverlayActionIntent(intent)
         setContent {
             Fluent11Theme {
@@ -141,6 +142,11 @@ class MainActivity : ComponentActivity() {
                     val lp = window.attributes
                     lp.screenBrightness = uiState.telemetry.windowBrightness
                     window.attributes = lp
+                }
+
+                LaunchedEffect(uiState.preferences.anchorTaskbarAtBottomEdge) {
+                    anchorBottomEdgePref = uiState.preferences.anchorTaskbarAtBottomEdge
+                    applyImmersiveNavigation(anchorBottomEdgePref)
                 }
 
                 Fluent11LauncherScreen(
@@ -199,23 +205,27 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        applyImmersiveNavigation()
+        applyImmersiveNavigation(anchorBottomEdgePref)
         viewModel.onLauncherResumed()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            applyImmersiveNavigation()
+            applyImmersiveNavigation(anchorBottomEdgePref)
         }
     }
 
-    private fun applyImmersiveNavigation() {
+    private fun applyImmersiveNavigation(anchorBottomEdge: Boolean) {
         runCatching {
             val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.navigationBars())
+            if (anchorBottomEdge) {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.navigationBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.navigationBars())
+            }
         }
     }
 }

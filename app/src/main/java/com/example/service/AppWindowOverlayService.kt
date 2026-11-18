@@ -13,6 +13,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -81,7 +82,8 @@ class AppWindowOverlayService : Service() {
     // Bottom persistent Windows 11 Taskbar & collapse controls
     private var taskbarRootView: View? = null
     private var taskbarLayoutParams: WindowManager.LayoutParams? = null
-    private var bottomRestorePillView: TextView? = null
+    private var bottomRestorePillView: LinearLayout? = null
+    private var bottomRestoreLabelView: TextView? = null
     private var collapseMenuRootView: View? = null
     private var collapseMenuTopOptionView: TextView? = null
     private var taskbarCenterRow: LinearLayout? = null
@@ -101,6 +103,7 @@ class AppWindowOverlayService : Service() {
     private var bottomBarMinimized: Boolean = false
     private var collapseMenuExpanded: Boolean = false
     private var snapMenuExpanded: Boolean = false
+    private var lastRenderedEntriesKey: String = ""
     private var lastFreeformToastAtMs: Long = 0L
     private var clockTickerJob: Job? = null
     private var pendingStopJob: Job? = null
@@ -250,8 +253,8 @@ class AppWindowOverlayService : Service() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
-            alpha = 0f
-            translationY = -dp(10).toFloat()
+            alpha = 1f
+            translationY = 0f
         }
 
         // Sleek full-width Windows 11 Mica Title Bar placed below system Status Bar
@@ -484,8 +487,8 @@ class AppWindowOverlayService : Service() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(COLOR_TASKBAR_BG)
             elevation = dp(16).toFloat()
-            alpha = 0f
-            translationY = dp(16).toFloat()
+            alpha = 1f
+            translationY = 0f
         }
 
         // Top 1dp hairline border
@@ -606,19 +609,23 @@ class AppWindowOverlayService : Service() {
         clockBtn.addView(timeTxt)
         clockBtn.addView(dateTxt)
 
-        val minimizeBarsBtn = TextView(this).apply {
-            text = "⌄"
+        val minimizeBarsBtn = FrameLayout(this).apply {
             contentDescription = "Opções para minimizar barras"
-            setTextColor(COLOR_TEXT_SECONDARY)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
             isClickable = true
             isFocusable = false
-            layoutParams = LinearLayout.LayoutParams(dp(36), dp(40)).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(42), dp(40)).apply {
                 marginStart = dp(4)
             }
-            background = createPressableRoundedBg(COLOR_TRANSPARENT_BTN, Color.parseColor("#38FFFFFF"), dp(8))
+            background = createPressableRoundedBg(
+                normalColor = COLOR_CARD_SURFACE,
+                pressedColor = Color.parseColor("#4460CDFF"),
+                radiusPx = dp(8),
+                strokeColor = COLOR_BORDER_SUBTLE
+            )
+            addView(
+                ChevronIconView(this@AppWindowOverlayService, pointDown = true, color = COLOR_TEXT_PRIMARY),
+                FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER)
+            )
             setOnClickListener { toggleCollapseMenu() }
         }
 
@@ -634,12 +641,6 @@ class AppWindowOverlayService : Service() {
         taskbarRootView = wrapper
         try {
             wm.addView(wrapper, params)
-            wrapper.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(220L)
-                .setInterpolator(DecelerateInterpolator())
-                .start()
         } catch (e: Exception) {
             Log.e("AppWindowOverlay", "Failed to attach taskbar overlay", e)
             taskbarRootView = null
@@ -650,13 +651,16 @@ class AppWindowOverlayService : Service() {
     }
 
     private fun buildTaskbarLayoutParams(anchorBottomEdge: Boolean): WindowManager.LayoutParams {
-        val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
         val flags = if (anchorBottomEdge) {
-            baseFlags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         } else {
-            baseFlags
+            // Omit FLAG_LAYOUT_IN_SCREEN when not anchored to 0px so WindowManager reliably keeps
+            // the Taskbar above the system navigation bar across every app transition.
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         }
         return WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -668,7 +672,7 @@ class AppWindowOverlayService : Service() {
             gravity = Gravity.BOTTOM or Gravity.START
             x = 0
             y = 0
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (anchorBottomEdge && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
@@ -695,6 +699,18 @@ class AppWindowOverlayService : Service() {
         val wifiLabel = if (snapshot.wifiConnected) "Wi-Fi" else "Offline"
         val chargeMark = if (snapshot.isCharging) "⚡" else ""
         taskbarTrayStatusText?.text = "$wifiLabel • ${snapshot.batteryPercent}%$chargeMark"
+
+        val entriesKey = buildString {
+            append(currentPackageName)
+            append('|')
+            snapshot.entries.forEach {
+                append(it.id).append(':').append(it.isOpen).append(':').append(it.isActive).append(';')
+            }
+        }
+        if (entriesKey == lastRenderedEntriesKey && (taskbarCenterRow?.childCount ?: 0) > 0) {
+            return
+        }
+        lastRenderedEntriesKey = entriesKey
 
         val container = taskbarCenterRow ?: return
         container.removeAllViews()
@@ -809,6 +825,7 @@ class AppWindowOverlayService : Service() {
                 currentPackageName = pkg
                 currentAppLabel = entry.label
                 currentSizeMode = entry.sizeMode
+                collapseMenuExpanded = false
                 refreshOverlayLabels()
                 ExternalWindowOverlayBus.setSession(
                     ExternalAppSession(
@@ -832,7 +849,7 @@ class AppWindowOverlayService : Service() {
                     anchorTaskbarAtBottomEdge = anchorTaskbarAtBottomEdge,
                     isExplicitResize = false
                 )
-                renderTaskbarSnapshot(ExternalWindowOverlayBus.taskbarSnapshot.value)
+                syncOverlayBarVisibility()
             }
         } else {
             val intent = Intent(this, MainActivity::class.java).apply {
@@ -1082,7 +1099,7 @@ class AppWindowOverlayService : Service() {
         }
 
         val topOption = createCollapseMenuItem(
-            label = if (topBarMinimized) "▾ Restaurar barra superior" else "▴ Minimizar barra superior",
+            label = if (topBarMinimized) "Restaurar barra superior" else "Minimizar barra superior",
             contentDesc = "Alternar visibilidade da barra superior"
         ) {
             topBarMinimized = !topBarMinimized
@@ -1092,7 +1109,7 @@ class AppWindowOverlayService : Service() {
         collapseMenuTopOptionView = topOption
 
         val bottomOption = createCollapseMenuItem(
-            label = "▾ Minimizar barra inferior",
+            label = "Minimizar barra inferior",
             contentDesc = "Minimizar apenas a Barra de Tarefas inferior"
         ) {
             bottomBarMinimized = true
@@ -1101,7 +1118,7 @@ class AppWindowOverlayService : Service() {
         }
 
         val bothOption = createCollapseMenuItem(
-            label = "⊟ Recolher ambas as barras",
+            label = "Recolher ambas as barras",
             contentDesc = "Minimizar barras superior e inferior juntas",
             highlightColor = COLOR_ACCENT_CYAN
         ) {
@@ -1119,7 +1136,7 @@ class AppWindowOverlayService : Service() {
 
         val params = buildFloatingBottomOverlayParams(
             xPx = dp(10),
-            yPx = dp(62),
+            yPx = dp(60),
             anchorBottomEdge = anchorTaskbarAtBottomEdge
         )
         collapseMenuRootView = menu
@@ -1133,9 +1150,9 @@ class AppWindowOverlayService : Service() {
 
     private fun updateCollapseMenuLabels() {
         collapseMenuTopOptionView?.text = if (topBarMinimized) {
-            "▾ Restaurar barra superior"
+            "Restaurar barra superior"
         } else {
-            "▴ Minimizar barra superior"
+            "Minimizar barra superior"
         }
     }
 
@@ -1152,8 +1169,12 @@ class AppWindowOverlayService : Service() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER_VERTICAL
-            minHeight = dp(40)
-            setPadding(dp(12), dp(8), dp(14), dp(8))
+            minHeight = dp(42)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp(14), dp(9), dp(16), dp(9))
             isClickable = true
             isFocusable = false
             background = createPressableRoundedBg(
@@ -1173,23 +1194,32 @@ class AppWindowOverlayService : Service() {
         if (topRestorePillView != null) return
         val wm = windowManager ?: return
 
-        val pill = TextView(this).apply {
-            text = "▾ Barra"
-            contentDescription = "Restaurar barra superior"
-            setTextColor(COLOR_ACCENT_CYAN)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            minHeight = dp(36)
-            setPadding(dp(14), dp(6), dp(14), dp(6))
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(38)
+            setPadding(dp(12), dp(6), dp(14), dp(6))
             elevation = dp(12).toFloat()
             isClickable = true
             isFocusable = false
             background = createPressableRoundedBg(
                 normalColor = COLOR_MICA_BG,
                 pressedColor = Color.parseColor("#4460CDFF"),
-                radiusPx = dp(18),
+                radiusPx = dp(19),
                 strokeColor = COLOR_BORDER_HIGHLIGHT
+            )
+            addView(
+                ChevronIconView(this@AppWindowOverlayService, pointDown = true, color = COLOR_ACCENT_CYAN),
+                LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(6) }
+            )
+            addView(
+                TextView(this@AppWindowOverlayService).apply {
+                    text = "Barra"
+                    contentDescription = "Restaurar barra superior"
+                    setTextColor(COLOR_ACCENT_CYAN)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    typeface = Typeface.DEFAULT_BOLD
+                }
             )
             setOnClickListener {
                 topBarMinimized = false
@@ -1219,23 +1249,28 @@ class AppWindowOverlayService : Service() {
     }
 
     private fun ensureBottomRestorePillAttached() {
-        val labelText = if (topBarMinimized && bottomBarMinimized) "▴ Barras" else "▴ Barra"
+        val labelText = if (topBarMinimized && bottomBarMinimized) "Barras" else "Barra"
         val existing = bottomRestorePillView
         if (existing != null) {
-            existing.text = labelText
+            bottomRestoreLabelView?.text = labelText
             return
         }
         val wm = windowManager ?: return
 
-        val pill = TextView(this).apply {
+        val labelView = TextView(this).apply {
             text = labelText
             contentDescription = "Restaurar barras minimizadas"
             setTextColor(COLOR_ACCENT_CYAN)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            minHeight = dp(38)
-            setPadding(dp(14), dp(7), dp(14), dp(7))
+        }
+        bottomRestoreLabelView = labelView
+
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(40)
+            setPadding(dp(12), dp(7), dp(14), dp(7))
             elevation = dp(14).toFloat()
             isClickable = true
             isFocusable = false
@@ -1245,6 +1280,11 @@ class AppWindowOverlayService : Service() {
                 radiusPx = dp(20),
                 strokeColor = COLOR_BORDER_HIGHLIGHT
             )
+            addView(
+                ChevronIconView(this@AppWindowOverlayService, pointDown = false, color = COLOR_ACCENT_CYAN),
+                LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(6) }
+            )
+            addView(labelView)
             setOnClickListener {
                 if (topBarMinimized && bottomBarMinimized) {
                     topBarMinimized = false
@@ -1266,6 +1306,7 @@ class AppWindowOverlayService : Service() {
             .onFailure {
                 Log.e("AppWindowOverlay", "Failed to attach bottom restore pill", it)
                 bottomRestorePillView = null
+                bottomRestoreLabelView = null
             }
     }
 
@@ -1293,7 +1334,7 @@ class AppWindowOverlayService : Service() {
             gravity = Gravity.BOTTOM or Gravity.END
             x = xPx
             y = yPx
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (anchorBottomEdge && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
@@ -1425,6 +1466,7 @@ class AppWindowOverlayService : Service() {
             taskbarRootView = null
             taskbarLayoutParams = null
             taskbarCenterRow = null
+            lastRenderedEntriesKey = ""
         }
     }
 
@@ -1433,6 +1475,7 @@ class AppWindowOverlayService : Service() {
         if (view != null) {
             runCatching { windowManager?.removeViewImmediate(view) }
             bottomRestorePillView = null
+            bottomRestoreLabelView = null
         }
     }
 
@@ -1508,6 +1551,42 @@ class AppWindowOverlayService : Service() {
             outerPaint.strokeWidth = width * 0.14f
             canvas.drawCircle(cx, cy, radius, outerPaint)
             canvas.drawCircle(cx, cy, radius * 0.44f, innerPaint)
+        }
+    }
+
+    private class ChevronIconView(
+        context: Context,
+        private val pointDown: Boolean,
+        color: Int
+    ) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            this.color = color
+        }
+        private val path = Path()
+
+        override fun onDraw(canvas: Canvas) {
+            val w = width.toFloat()
+            val h = height.toFloat()
+            paint.strokeWidth = minOf(w, h) * 0.15f
+            val leftX = w * 0.22f
+            val midX = w * 0.50f
+            val rightX = w * 0.78f
+            val topY = h * 0.34f
+            val botY = h * 0.66f
+            path.reset()
+            if (pointDown) {
+                path.moveTo(leftX, topY)
+                path.lineTo(midX, botY)
+                path.lineTo(rightX, topY)
+            } else {
+                path.moveTo(leftX, botY)
+                path.lineTo(midX, topY)
+                path.lineTo(rightX, botY)
+            }
+            canvas.drawPath(path, paint)
         }
     }
 

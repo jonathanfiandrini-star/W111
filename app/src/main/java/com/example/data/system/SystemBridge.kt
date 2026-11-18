@@ -332,20 +332,16 @@ class SystemBridge(private val context: Context) {
             }
 
             val bundle = options.toBundle()
-            if (context !is Activity && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val pendingResult = runCatching {
-                    PendingIntent.getActivity(
-                        context,
-                        packageName.hashCode(),
-                        intent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    ).send(context, 0, null, null, null, null, bundle)
-                }
-                if (pendingResult.isFailure) {
-                    context.startActivity(intent, bundle)
-                }
-            } else {
+            val directLaunchOk = runCatching {
                 context.startActivity(intent, bundle)
+            }.isSuccess
+            if (!directLaunchOk && context !is Activity && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                PendingIntent.getActivity(
+                    context,
+                    packageName.hashCode(),
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                ).send(context, 0, null, null, null, null, bundle)
             }
             true
         } catch (_: Exception) {
